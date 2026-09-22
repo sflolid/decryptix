@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A daily code-breaking puzzle. Find the 5-digit code that satisfies every rule." />
+    <title>Decrypt</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>DECRYPT <span id="puzzle-no"></span></h1>
+      <p class="tagline">Find the 5-digit code that passes every rule.</p>
+    </header>
+
+    <main>
+      <section id="rules" class="rules" aria-label="Rules"></section>
+
+      <section class="entry">
+        <div id="slots" class="slots" aria-live="polite"></div>
+        <p id="status" class="status" role="status"></p>
+      </section>
+
+      <section id="keypad" class="keypad" aria-label="Keypad"></section>
+
+      <section id="history" class="history" aria-label="Previous guesses"></section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
