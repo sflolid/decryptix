@@ -24,11 +24,10 @@ interface State {
   final: string | null;
   /** Answers the player has crossed out on each card. */
   notes: number[][];
-  /** Digit notes per position, indexed by digit value: 0 blank, 1 crossed out, 2 marked. */
+  /** Digit notes per position, indexed by digit value: 1 crossed out, 0 not. */
   grid: number[][];
 }
 
-const NOTE_STATES = ['', 'crossed out', 'marked'];
 const DIGITS = Array.from({ length: DIGIT_MAX - DIGIT_MIN + 1 }, (_, i) => DIGIT_MIN + i);
 
 const day = todayKey();
@@ -200,7 +199,7 @@ function fillText(el: HTMLElement, text: string) {
 
 function toggleGrid(pos: number, digit: number) {
   const row = state.grid[pos];
-  row[digit] = (row[digit] + 1) % NOTE_STATES.length;
+  row[digit] = row[digit] === 1 ? 0 : 1;
   save();
   renderNotes();
 }
@@ -214,12 +213,15 @@ function renderNotes() {
     ...positions().map((pos, i) => {
       const col = document.createElement('div');
       col.className = `note-col p${i}`;
+      // Once every digit but one is crossed out, the one left is the deduction.
+      const left = DIGITS.filter((d) => state.grid[i][d] !== 1);
       for (const d of DIGITS) {
         const cell = document.createElement('button');
-        const note = state.grid[i][d];
-        cell.className = 'note' + (note === 1 ? ' crossed' : note === 2 ? ' marked' : '');
+        const crossed = state.grid[i][d] === 1;
+        const deduced = !crossed && left.length === 1;
+        cell.className = 'note' + (crossed ? ' crossed' : deduced ? ' deduced' : '');
         cell.textContent = String(d);
-        cell.setAttribute('aria-label', `${pos.name} digit ${d}${note ? `, ${NOTE_STATES[note]}` : ''}`);
+        cell.setAttribute('aria-label', `${pos.name} digit ${d}${crossed ? ', crossed out' : deduced ? ', the only one left' : ''}`);
         cell.disabled = notesLocked;
         cell.addEventListener('click', () => toggleGrid(i, d));
         col.append(cell);

@@ -309,7 +309,8 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   font-weight: bold;
 }
 .note.crossed { color: var(--muted); opacity: 0.3; text-decoration: line-through; }
-.note.marked { border: 2px solid var(--pc); background: color-mix(in srgb, var(--pc) 35%, var(--raised)); }
+/* The last digit left in a column after crossing out the rest. */
+.note.deduced { border: 2px solid var(--pass); background: color-mix(in srgb, var(--pass) 30%, var(--raised)); }
 
 .status { margin: 0; min-height: 1.4em; color: var(--muted); font-size: 0.95rem; text-align: center; }
 .status.win { color: var(--pass); font-weight: bold; }
@@ -402,4 +403,4 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 /* Locked notes keep their marks readable but stop reacting to taps. */
 .notes.locked .note { cursor: default; border-style: dashed; }
-.notes.locked .note:not(.crossed):not(.marked) { opacity: 0.7; }
+.notes.locked .note:not(.crossed):not(.deduced) { opacity: 0.7; }
