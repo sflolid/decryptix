@@ -14,7 +14,6 @@
   --p2: #c79be0;
   --p3: #f29cc2;
   --p4: #a9d0e2;
-  --p5: #a3a0ff;
   --font-ui: 'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
   color-scheme: dark;
@@ -43,7 +42,6 @@
     --p2: #7d4f9e;
     --p3: #b8487e;
     --p4: #3f6f86;
-    --p5: #4b44c2;
     color-scheme: light;
   }
 }
@@ -63,7 +61,6 @@
   --p2: #7d4f9e;
   --p3: #b8487e;
   --p4: #3f6f86;
-  --p5: #4b44c2;
   color-scheme: light;
 }
 
@@ -81,39 +78,106 @@ body {
 }
 
 header { width: 100%; max-width: 1100px; text-align: center; }
+.title-row { position: relative; }
 h1 { margin: 4px 0 10px; font-family: var(--font-mono); letter-spacing: 0.2em; font-size: 1.8rem; }
 h1 span { color: var(--accent); }
+.icon-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 1.2rem;
+}
 
-.howto {
+/* The help box: a collapsible "How to play" with the area-tips switch pinned
+   in its top corner, outside the collapsible part so it works either way. */
+.howto-box {
+  position: relative;
   max-width: 640px;
   margin: 0 auto 16px;
-  padding: 10px 14px;
   text-align: left;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
-  font-size: 0.95rem;
-  line-height: 1.55;
 }
-.howto summary { cursor: pointer; color: var(--muted); font-weight: bold; }
+.howto { padding: 10px 14px; font-size: 0.95rem; line-height: 1.55; }
+.howto summary { cursor: pointer; color: var(--muted); font-weight: bold; padding-right: 140px; }
+.switch {
+  position: absolute;
+  top: 7px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+.switch input {
+  appearance: none;
+  position: relative;
+  width: 40px;
+  height: 22px;
+  margin: 0;
+  background: var(--border);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.switch input::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: var(--panel);
+  border-radius: 50%;
+  transition: translate 0.15s;
+}
+.switch input:checked { background: var(--accent); }
+.switch input:checked::after { translate: 18px 0; }
+.switch input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .howto p { margin: 10px 0; }
+.howto ol { margin: 10px 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 6px; }
 .ok { color: var(--pass); font-weight: bold; }
 .no { color: var(--fail); font-weight: bold; }
 
 main { width: 100%; max-width: 1100px; }
+
+/* Labelled areas: a small heading and a one-line tip saying what it's for. */
+.area { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.area[hidden] { display: none; }
+.area-head { display: flex; flex-direction: column; gap: 2px; }
+.area-head h2 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.tip { margin: 0; color: var(--muted); font-size: 0.85rem; line-height: 1.4; }
+.no-tips .tip { display: none; }
+.dock .area { align-items: center; }
+.dock .area-head { align-self: stretch; text-align: center; }
 .board { display: flex; flex-direction: column; gap: 20px; }
 
 button { font: inherit; color: var(--text); cursor: pointer; }
 button:disabled { cursor: default; }
 button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
-/* Digit positions: each column has its own color and shape (● ▲ ■ ⬟ ⬢ gaining an edge each, then ★). */
+/* Digit positions: each column has its own color and shape (● ▲ ■ ⬟ ⬢, gaining an edge each). */
 .p0 { --pc: var(--p0); }
 .p1 { --pc: var(--p1); }
 .p2 { --pc: var(--p2); }
 .p3 { --pc: var(--p3); }
 .p4 { --pc: var(--p4); }
-.p5 { --pc: var(--p5); }
 .pos { display: inline-flex; align-items: center; gap: 4px; color: var(--pc); font-weight: bold; white-space: nowrap; }
 .pos .sym { width: 0.85em; height: 0.85em; flex: none; fill: currentColor; }
 
@@ -132,9 +196,8 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   border: 1px solid var(--border);
   border-radius: 12px;
 }
-.card.tricky { border: 2px dashed var(--p0); }
-.card.tricky .card-letter { background: var(--p0); }
-.tricky-hint { margin: -4px 0 0; color: var(--muted); font-size: 0.85rem; line-height: 1.35; }
+/* A tricky card's explanation is an area tip, so the tips switch hides it too. */
+.tricky-hint { margin-top: -4px; line-height: 1.35; }
 .card-head { display: flex; align-items: center; gap: 12px; min-height: 38px; }
 .card-letter {
   flex: none;
@@ -294,7 +357,10 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   border-bottom: 5px solid var(--pc);
   border-radius: 8px;
 }
+button.slot { padding: 0; color: var(--text); }
+button.slot:disabled { cursor: default; }
 .slot.active { border-color: var(--accent); border-bottom-color: var(--pc); }
+.slot.drop-target { outline: 3px solid var(--accent); outline-offset: 2px; }
 .locked > .slot {
   border-color: var(--accent);
   border-bottom-color: var(--pc);
@@ -313,8 +379,8 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   font-weight: bold;
 }
 .note.crossed { color: var(--muted); opacity: 0.3; text-decoration: line-through; }
-/* The last digit left in a column after crossing out the rest. */
-.note.deduced { border: 2px solid var(--pass); background: color-mix(in srgb, var(--pass) 30%, var(--raised)); }
+/* The last digit left in a column after crossing out the rest, in that position's color. */
+.note.deduced { border: 2px solid var(--pc); background: color-mix(in srgb, var(--pc) 35%, var(--raised)); }
 
 .status { margin: 0; min-height: 1.4em; color: var(--muted); font-size: 0.95rem; text-align: center; }
 .status.win { color: var(--pass); font-weight: bold; }
@@ -337,6 +403,25 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   border-radius: 8px;
 }
 .key:active { background: var(--border); }
+/* Keypad digits can be dragged onto slots; don't let the browser pan instead. */
+.key { touch-action: none; user-select: none; }
+.drag-ghost {
+  position: fixed;
+  z-index: 100;
+  translate: -50% -60%;
+  width: 44px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: bold;
+  pointer-events: none;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.3);
+}
 .keypad.disabled { opacity: 0.4; pointer-events: none; }
 
 .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
@@ -358,7 +443,9 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   body { min-height: 0; padding: 0; overflow: hidden; }
   header { flex: none; padding: 10px 16px 0; }
   h1 { margin: 0 0 8px; font-size: 1.5rem; }
-  .howto { margin-bottom: 10px; }
+  .howto-box { margin-bottom: 10px; }
+  /* The header doesn't scroll on phones, so an open help box scrolls itself. */
+  .howto[open] { max-height: 45dvh; overflow-y: auto; }
   main {
     flex: 1;
     min-height: 0;
@@ -380,6 +467,10 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px));
   }
   .board { gap: 14px; }
+  /* Bigger tap targets for fingers. */
+  .note { height: 34px; font-size: 1rem; }
+  .key { height: 50px; }
+  .dock { gap: 16px; }
 }
 
 @media (min-width: 900px) {

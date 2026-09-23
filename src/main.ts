@@ -3,10 +3,15 @@ import { DIFFICULTIES, DIGIT_MAX, DIGIT_MIN, type Difficulty, type Puzzle, daily
 
 const CHECKS_PER_ROUND = 3;
 /** Saved progress is kept per difficulty: `${STORAGE_PREFIX}easy` etc. */
-const STORAGE_PREFIX = 'decrypt:v10:';
+const STORAGE_PREFIX = 'decrypt:v12:';
 const DIFFICULTY_KEY = 'decrypt:difficulty';
 const NOTES_HIDDEN_KEY = 'decrypt:notesHidden';
 const NOTES_LOCKED_KEY = 'decrypt:notesLocked';
+const TIPS_HIDDEN_KEY = 'decrypt:tipsHidden';
+/** 'light' or 'dark' once the player picks one; otherwise the device setting applies. */
+const THEME_KEY = 'decrypt:theme';
+/** Set once "How to play" has been shown open on a first visit. */
+const SEEN_HELP_KEY = 'decrypt:seenHelp';
 const LETTERS = 'ABCDEFGHIJ';
 
 /** One code tested against some cards; results[i] is null if card i wasn't checked. */
@@ -40,7 +45,10 @@ let secret: string;
 /** Digits in the active code. */
 let length: number;
 let state: State;
-let code = '';
+/** The code being entered, one digit per slot ('' = empty). */
+let entry: string[] = [];
+/** The slot the keypad fills next; `length` when every slot is filled. */
+let cursor = 0;
 /** Which inline confirmation is showing, if any (the viewer blocks confirm() dialogs). */
 let confirming: 'final' | 'restart' | null = null;
 
@@ -67,13 +75,15 @@ const solved = () => state.final === secret;
 const currentRound = () => (state.open ? state.rounds.at(-1)! : null);
 const checksIn = (r: Round) => r.results.filter((x) => x !== null).length;
 const totalChecks = () => state.rounds.reduce((n, r) => n + checksIn(r), 0);
-const shownCode = () => currentRound()?.code ?? code;
+const entryComplete = () => entry.length === length && entry.every((d) => d !== '');
+/** The complete code on show (the locked round's, or a fully typed entry), else ''. */
+const shownCode = () => currentRound()?.code ?? (entryComplete() ? entry.join('') : '');
 
 function canCheck(i: number): boolean {
   if (done()) return false;
   const r = currentRound();
   if (r) return r.results[i] === null && checksIn(r) < CHECKS_PER_ROUND;
-  return code.length === length;
+  return entryComplete();
 }
 
 function fresh(): State {
@@ -113,9 +123,9 @@ function save() {
 function check(i: number) {
   if (!canCheck(i)) return;
   if (!state.open) {
-    state.rounds.push({ code, results: cards.map(() => null) });
+    state.rounds.push({ code: entry.join(''), results: cards.map(() => null) });
     state.open = true;
-    code = '';
+    clearEntry();
   }
   const r = currentRound()!;
   r.results[i] = passes(i, toDigits(r.code));
@@ -132,19 +142,79 @@ function toggleNote(card: number, option: number) {
   renderCards();
 }
 
+function clearEntry() {
+  entry = Array<string>(length).fill('');
+  cursor = 0;
+}
+
+/** The next empty slot after `from` (wrapping round), or `length` if all are filled. */
+function nextEmpty(from: number): number {
+  for (let k = 1; k <= length; k++) {
+    const i = (from + k) % length;
+    if (entry[i] === '') return i;
+  }
+  return length;
+}
+
+/**
+ * Editing ends a round whose code is locked in. Typing a new digit starts a
+ * fresh code; anything else (backspace, picking or dropping onto a slot)
+ * edits a copy of the checked code.
+ */
+function unlockRound(fresh: boolean) {
+  if (!state.open) return;
+  if (fresh) clearEntry();
+  else {
+    entry = state.rounds.at(-1)!.code.split('');
+    cursor = length;
+  }
+  state.open = false;
+  save();
+}
+
 function press(key: string) {
   if (done()) return;
   confirming = null;
-  if (state.open) {
-    // Editing the code ends the current round; keep its code as a starting point.
-    code = state.rounds.at(-1)!.code;
-    state.open = false;
-    save();
-    if (/^\d$/.test(key)) code = '';
-  }
   const n = Number(key);
-  if (/^\d$/.test(key) && n >= DIGIT_MIN && n <= DIGIT_MAX && code.length < length) code += key;
-  else if (key === 'Backspace') code = code.slice(0, -1);
+  if (/^\d$/.test(key) && n >= DIGIT_MIN && n <= DIGIT_MAX) {
+    unlockRound(true);
+    if (cursor < length) {
+      entry[cursor] = key;
+      cursor = nextEmpty(cursor);
+    }
+  } else if (key === 'Backspace') {
+    unlockRound(false);
+    // Clear the selected slot if it has a digit, otherwise the last filled one before it.
+    let i = cursor < length && entry[cursor] !== '' ? cursor : -1;
+    for (let j = Math.min(cursor, length) - 1; i < 0 && j >= 0; j--) if (entry[j] !== '') i = j;
+    if (i >= 0) {
+      entry[i] = '';
+      cursor = i;
+    }
+  } else if (key === 'ArrowLeft' || key === 'ArrowRight') {
+    unlockRound(false);
+    const step = key === 'ArrowLeft' ? -1 : 1;
+    cursor = Math.max(0, Math.min(length - 1, (cursor === length ? length - 1 : cursor) + step));
+  }
+  render();
+}
+
+/** Pick which slot the keypad fills next. */
+function selectSlot(i: number) {
+  if (done()) return;
+  confirming = null;
+  unlockRound(false);
+  cursor = i;
+  render();
+}
+
+/** Put a digit straight into a slot (drag and drop from the keypad). */
+function dropDigit(i: number, digit: string) {
+  if (done()) return;
+  confirming = null;
+  unlockRound(false);
+  entry[i] = digit;
+  cursor = nextEmpty(i);
   render();
 }
 
@@ -160,11 +230,8 @@ function submitFinal() {
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/**
- * A regular polygon with `sides` edges (0 draws a circle), flat-bottomed where
- * possible, or a star with `sides` points.
- */
-function shape(sides: number, star = false): SVGSVGElement {
+/** A regular polygon with `sides` edges (0 draws a circle), flat-bottomed where possible. */
+function shape(sides: number): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', '-1 -1 2 2');
   svg.setAttribute('class', 'sym');
@@ -174,13 +241,10 @@ function shape(sides: number, star = false): SVGSVGElement {
     c.setAttribute('r', '0.85');
     svg.append(c);
   } else {
-    // A star alternates outer points with inner corners at 45% radius.
-    const corners = star ? sides * 2 : sides;
-    const start = -Math.PI / 2 + (!star && sides % 2 === 0 ? Math.PI / sides : 0);
-    const pts = Array.from({ length: corners }, (_, k) => {
-      const a = start + (2 * Math.PI * k) / corners;
-      const r = star && k % 2 ? 0.45 : 1;
-      return `${(r * Math.cos(a)).toFixed(3)},${(r * Math.sin(a)).toFixed(3)}`;
+    const start = -Math.PI / 2 + (sides % 2 === 0 ? Math.PI / sides : 0);
+    const pts = Array.from({ length: sides }, (_, k) => {
+      const a = start + (2 * Math.PI * k) / sides;
+      return `${Math.cos(a).toFixed(3)},${Math.sin(a).toFixed(3)}`;
     });
     const p = document.createElementNS(SVG_NS, 'polygon');
     p.setAttribute('points', pts.join(' '));
@@ -193,7 +257,7 @@ function shape(sides: number, star = false): SVGSVGElement {
 function posChip(i: number): HTMLElement {
   const chip = document.createElement('span');
   chip.className = `pos p${i}`;
-  chip.append(shape(POSITIONS[i].sides, POSITIONS[i].star));
+  chip.append(shape(POSITIONS[i].sides));
   chip.append(POSITIONS[i].name);
   return chip;
 }
@@ -242,7 +306,7 @@ function renderCards() {
   cardsEl.innerHTML = '';
   cards.forEach((card, i) => {
     const el = document.createElement('article');
-    el.className = card.tricky ? 'card tricky' : 'card';
+    el.className = 'card';
 
     const head = document.createElement('div');
     head.className = 'card-head';
@@ -267,7 +331,7 @@ function renderCards() {
     el.append(head);
     if (card.tricky) {
       const hint = document.createElement('p');
-      hint.className = 'tricky-hint';
+      hint.className = 'tip tricky-hint';
       fillText(hint, card.hint ?? 'Tricky card.');
       el.append(hint);
     }
@@ -301,17 +365,27 @@ function renderCards() {
   });
 }
 
-/** Draw the code into the dock's slots and the guess bar's mini slots. */
+/**
+ * Draw the code into the dock's slots (buttons: tap to pick where the next
+ * digit goes, or drop a keypad digit on one) and the guess bar's mini slots.
+ */
 function renderSlots() {
-  const shown = done() ? state.final! : shownCode();
+  const shown = done() ? state.final!.split('') : state.open ? currentRound()!.code.split('') : entry;
   const locked = state.open || done();
   for (const el of [slotsEl, guessSlotsEl]) {
+    const big = el === slotsEl;
     el.classList.toggle('locked', locked);
     el.replaceChildren(
       ...Array.from({ length }, (_, i) => {
-        const slot = document.createElement('span');
-        slot.className = `slot p${i}` + (i === shown.length && !locked ? ' active' : '');
+        const slot = document.createElement(big ? 'button' : 'span');
+        slot.className = `slot p${i}` + (i === cursor && !locked ? ' active' : '');
         slot.textContent = shown[i] ?? '';
+        if (big) {
+          slot.dataset.slot = String(i);
+          slot.setAttribute('aria-label', `${POSITIONS[i].name} digit${shown[i] ? ` ${shown[i]}` : ', empty'}`);
+          (slot as HTMLButtonElement).disabled = done();
+          slot.addEventListener('click', () => selectSlot(i));
+        }
         return slot;
       }),
     );
@@ -327,7 +401,7 @@ function shortStatus(): string {
     const left = CHECKS_PER_ROUND - checksIn(r);
     return left ? `${left} check${left === 1 ? '' : 's'} left` : 'Round done: new code';
   }
-  return code.length < length ? 'Type a code' : 'Pick cards to check';
+  return entryComplete() ? 'Pick cards to check' : 'Type a code';
 }
 
 function renderStatus() {
@@ -350,10 +424,12 @@ function renderStatus() {
     statusEl.textContent = left
       ? `Round ${rounds}: ${left} check${left === 1 ? '' : 's'} left for this code. ${tally}`
       : `Round ${rounds} done. Type a new code for the next round. ${tally}`;
-  } else if (code.length < length) {
-    statusEl.textContent = rounds ? `Enter a new code. ${tally}` : 'Enter a code, then check it against up to 3 cards.';
+  } else if (!entryComplete()) {
+    statusEl.textContent = rounds
+      ? `Enter a new code. ${tally}`
+      : 'Type a code, or drag digits onto the slots, then check it against up to 3 cards.';
   } else {
-    statusEl.textContent = `Pick up to 3 cards to check ${code} against. ${tally}`;
+    statusEl.textContent = `Pick up to 3 cards to check ${entry.join('')} against. ${tally}`;
   }
 }
 
@@ -379,7 +455,7 @@ function renderActions() {
     return;
   }
   if (done()) button('Share result', 'action primary', share);
-  else button('Submit final answer…', 'action primary', ask('final'), shownCode().length !== length);
+  else button('Submit final answer…', 'action primary', ask('final'), shownCode() === '');
   if (!notesHidden) button(notesLocked ? '🔒 Unlock notes' : '🔓 Lock notes', 'action', toggleNotesLock);
   button(notesHidden ? 'Show notes' : 'Hide notes', 'action', toggleNotesPanel);
   button('Restart', 'action', ask('restart'));
@@ -387,7 +463,7 @@ function renderActions() {
 
 function restart() {
   Object.assign(state, fresh());
-  code = '';
+  clearEntry();
   confirming = null;
   save();
   render();
@@ -413,6 +489,50 @@ function writeFlag(key: string, on: boolean) {
 let notesHidden = readFlag(NOTES_HIDDEN_KEY);
 let notesLocked = readFlag(NOTES_LOCKED_KEY);
 
+let tipsHidden = readFlag(TIPS_HIDDEN_KEY);
+
+const tipsToggle = $<HTMLInputElement>('tips-toggle');
+tipsToggle.checked = !tipsHidden;
+tipsToggle.addEventListener('change', () => {
+  tipsHidden = !tipsToggle.checked;
+  writeFlag(TIPS_HIDDEN_KEY, tipsHidden);
+  render();
+});
+
+/**
+ * Light / dark theme. The stylesheet follows the device setting unless the
+ * root has data-theme set, so picking one just sets that attribute.
+ */
+const themeToggle = $('theme-toggle');
+const activeTheme = (): 'light' | 'dark' => {
+  const set = document.documentElement.dataset.theme;
+  if (set === 'light' || set === 'dark') return set;
+  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+};
+function applyTheme(theme?: 'light' | 'dark') {
+  if (theme) document.documentElement.dataset.theme = theme;
+  const dark = activeTheme() === 'dark';
+  themeToggle.textContent = dark ? '☀' : '☾';
+  themeToggle.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+  themeToggle.title = themeToggle.getAttribute('aria-label')!;
+}
+try {
+  const saved = localStorage.getItem(THEME_KEY);
+  applyTheme(saved === 'light' || saved === 'dark' ? saved : undefined);
+} catch {
+  applyTheme();
+}
+themeToggle.addEventListener('click', () => {
+  const next = activeTheme() === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch {
+    /* ignore */
+  }
+});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme());
+
 function toggleNotesPanel() {
   notesHidden = !notesHidden;
   writeFlag(NOTES_HIDDEN_KEY, notesHidden);
@@ -427,6 +547,7 @@ function toggleNotesLock() {
 
 function renderLog() {
   logEl.innerHTML = '';
+  $('log-section').hidden = !state.rounds.length;
   if (!state.rounds.length) return;
   const head = cards.map((_, i) => `<th scope="col">${LETTERS[i]}</th>`).join('');
   const rows = state.rounds
@@ -447,7 +568,8 @@ function render() {
   renderNotes();
   renderStatus();
   renderActions();
-  notesEl.hidden = notesHidden;
+  $('notes-section').hidden = notesHidden;
+  document.body.classList.toggle('no-tips', tipsHidden);
   notesEl.classList.toggle('locked', notesLocked);
   keypadEl.classList.toggle('disabled', done());
   renderLog();
@@ -458,7 +580,7 @@ async function share() {
   const checks = totalChecks();
   const outcome = solved() ? `🔓 ${checks} checks · ${state.rounds.length} rounds` : `🔒 failed after ${checks} checks`;
   const grid = state.rounds.map((r) => r.results.map((x) => (x === null ? '⬛' : x ? '🟩' : '🟥')).join('')).join('\n');
-  const text = `DECRYPT #${puzzle.number} ${DIFFICULTIES[difficulty].label} ${outcome}\n${grid}`;
+  const text = `DECRYPT #${puzzle.number} ${DIFFICULTIES[difficulty].label} (${length} digits) ${outcome}\n${grid}`;
   try {
     await navigator.clipboard.writeText(text);
     statusEl.textContent = 'Result copied to clipboard';
@@ -467,6 +589,54 @@ async function share() {
   }
 }
 
+/**
+ * Dragging a keypad digit onto a slot. Uses pointer events so it works with
+ * touch as well as a mouse; a press that doesn't move is an ordinary tap.
+ */
+let drag: { digit: string; x: number; y: number; ghost: HTMLElement | null } | null = null;
+/** Set right after a drag so the key's click (if the drag ends on it) is ignored. */
+let suppressClick = false;
+
+const slotUnder = (e: PointerEvent) =>
+  (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>('[data-slot]') ?? null;
+
+function markDropTarget(target: HTMLElement | null) {
+  for (const s of slotsEl.querySelectorAll('.drop-target')) s.classList.remove('drop-target');
+  target?.classList.add('drop-target');
+}
+
+function endDrag() {
+  drag?.ghost?.remove();
+  drag = null;
+  markDropTarget(null);
+}
+
+document.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  if (!drag.ghost) {
+    if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 8) return;
+    drag.ghost = document.createElement('div');
+    drag.ghost.className = 'drag-ghost';
+    drag.ghost.textContent = drag.digit;
+    document.body.append(drag.ghost);
+  }
+  drag.ghost.style.left = `${e.clientX}px`;
+  drag.ghost.style.top = `${e.clientY}px`;
+  markDropTarget(slotUnder(e));
+});
+
+document.addEventListener('pointerup', (e) => {
+  if (!drag) return;
+  const { digit, ghost } = drag;
+  const target = ghost ? slotUnder(e) : null;
+  endDrag();
+  if (!ghost) return; // a plain tap: the key's click handler presses it
+  suppressClick = true;
+  setTimeout(() => (suppressClick = false));
+  if (target) dropDigit(Number(target.dataset.slot), digit);
+});
+document.addEventListener('pointercancel', endDrag);
+
 function buildKeypad() {
   const digits = DIGITS.map(String);
   for (const k of [...digits, 'Backspace']) {
@@ -474,14 +644,19 @@ function buildKeypad() {
     btn.textContent = k === 'Backspace' ? '⌫' : k;
     btn.className = 'key';
     btn.setAttribute('aria-label', k);
-    btn.addEventListener('click', () => press(k));
+    btn.addEventListener('click', () => !suppressClick && press(k));
+    if (k !== 'Backspace') {
+      btn.addEventListener('pointerdown', (e) => {
+        if (!done()) drag = { digit: k, x: e.clientX, y: e.clientY, ghost: null };
+      });
+    }
     keypadEl.append(btn);
   }
 }
 
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
-  if (/^\d$/.test(e.key) || e.key === 'Backspace') {
+  if (/^\d$/.test(e.key) || ['Backspace', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
     e.preventDefault();
     press(e.key);
   }
@@ -506,12 +681,12 @@ function selectDifficulty(d: Difficulty) {
   } catch {
     /* ignore */
   }
-  puzzle = dailyPuzzle(d, day);
+  puzzle = puzzleFor(d);
   cards = puzzle.cards;
   secret = puzzle.secret.join('');
   length = puzzle.secret.length;
   state = load();
-  code = '';
+  clearEntry();
   confirming = null;
   document.documentElement.style.setProperty('--cols', String(length));
   $('puzzle-no').textContent = `#${puzzle.number}`;
@@ -519,17 +694,18 @@ function selectDifficulty(d: Difficulty) {
   render();
 }
 
-/** Difficulty switcher, marking the ones already finished today. */
+/** Difficulty switcher, showing each level's code length and marking finished ones. */
 function renderLevels() {
   levelsEl.replaceChildren(
     ...(Object.keys(DIFFICULTIES) as Difficulty[]).map((d) => {
-      const { label, length: len } = DIFFICULTIES[d];
+      const { label } = DIFFICULTIES[d];
+      const p = puzzles.get(d);
       const saved = d === difficulty ? state : savedState(d);
-      const result = saved?.final == null ? '' : saved.final === dailyAnswer(d) ? ' ✓' : ' ✗';
+      const result = !p || saved?.final == null ? '' : saved.final === p.secret.join('') ? ' ✓' : ' ✗';
       const btn = document.createElement('button');
       btn.className = 'level';
       btn.setAttribute('aria-pressed', String(d === difficulty));
-      btn.innerHTML = `<span class="level-name"></span><span class="level-len">${len} digits${result}</span>`;
+      btn.innerHTML = `<span class="level-name"></span><span class="level-len">${p ? `${p.secret.length} digits` : '…'}${result}</span>`;
       btn.querySelector('.level-name')!.textContent = label;
       btn.addEventListener('click', () => d !== difficulty && selectDifficulty(d));
       return btn;
@@ -537,12 +713,25 @@ function renderLevels() {
   );
 }
 
-/** The secret for another difficulty, only needed to mark it solved or not. */
-const answers = new Map<Difficulty, string>();
-function dailyAnswer(d: Difficulty): string {
-  if (d === difficulty) return secret;
-  if (!answers.has(d)) answers.set(d, dailyPuzzle(d, day).secret.join(''));
-  return answers.get(d)!;
+/** Today's puzzle per difficulty, generated on first use. */
+const puzzles = new Map<Difficulty, Puzzle>();
+function puzzleFor(d: Difficulty): Puzzle {
+  if (!puzzles.has(d)) puzzles.set(d, dailyPuzzle(d, day));
+  return puzzles.get(d)!;
+}
+
+/**
+ * Generate the other levels' puzzles after the page is showing, one per
+ * tick, so the level buttons can show their code lengths and results.
+ */
+function preloadOtherLevels() {
+  const next = (Object.keys(DIFFICULTIES) as Difficulty[]).find((d) => !puzzles.has(d));
+  if (!next) return;
+  setTimeout(() => {
+    puzzleFor(next);
+    renderLevels();
+    preloadOtherLevels();
+  }, 0);
 }
 
 // On narrow screens the cards and the dock are two side-by-side panes that
@@ -566,4 +755,11 @@ panesEl.addEventListener(
 );
 
 buildKeypad();
+// Open "How to play" for first-time visitors.
+if (!readFlag(SEEN_HELP_KEY)) {
+  document.querySelector<HTMLDetailsElement>('.howto')!.open = true;
+  writeFlag(SEEN_HELP_KEY, true);
+}
+
 selectDifficulty(savedDifficulty());
+preloadOtherLevels();

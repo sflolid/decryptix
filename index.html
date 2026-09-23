@@ -15,27 +15,35 @@
   </head>
   <body>
     <header>
-      <h1>DECRYPT <span id="puzzle-no"></span></h1>
+      <div class="title-row">
+        <h1>DECRYPT <span id="puzzle-no"></span></h1>
+        <button id="theme-toggle" class="icon-btn" type="button"></button>
+      </div>
       <nav id="levels" class="levels" aria-label="Difficulty"></nav>
-      <details class="howto">
-        <summary>How to play</summary>
-        <p>
-          The secret is a code using digits <strong id="digit-range"></strong>: 3 digits on Easy, 4 on Medium, 5 on Hard and 6 on Very hard. Each card asks a question and lists every possible answer. Every code
-          gets exactly one answer, and the card secretly checks the secret's answer. <strong>Tricky</strong> cards
-          are harder: some ask how far apart two digits are without saying which is bigger, and some compare a digit
-          with one of two others but only check one of those comparisons.
-        </p>
-        <p>
-          Enter any code and check it against up to <strong>3 cards</strong> per round. A card shows
-          <span class="ok">✓</span> if your code gets the same answer as the secret, or <span class="no">✗</span> if not.
-          Type a new code to start the next round.
-        </p>
-        <p>
-          Tap an answer on a card to cross it out in your notes; when only one is left it turns green. Under the code, tap a digit to cross it out for
-          that spot (tap again to bring it back); when only one is left in a column it turns green. When you're sure, submit your final answer. You
-          only get one, and your score is how few checks you needed.
-        </p>
-      </details>
+      <div class="howto-box">
+        <details class="howto">
+          <summary>How to play</summary>
+          <ol>
+            <li>The secret is a 3- to 5-digit code using digits <strong id="digit-range"></strong>.</li>
+            <li>Each <strong>rule card</strong> lists every possible answer to a question, and secretly checks the one the secret gets.</li>
+            <li>
+              Enter a code and check it against up to <strong>3 cards</strong> per round. <span class="ok">✓</span> means
+              your code gets the same answer as the secret; <span class="no">✗</span> means it doesn't.
+            </li>
+            <li>Use the results to cross off card answers and digits you've ruled out, until only one code fits.</li>
+            <li>Submit your final answer when you're sure. You only get one, and fewer checks is better.</li>
+          </ol>
+          <p>
+            <strong>Tricky</strong> cards are harder: they say how far apart two digits are without
+            saying which is bigger, or compare a digit with one of two others but only check one. Harder levels need
+            more checks and more reasoning, not longer codes.
+          </p>
+        </details>
+        <label class="switch">
+          <input type="checkbox" id="tips-toggle" checked />
+          <span>Area tips</span>
+        </label>
+      </div>
       <nav class="tabs" aria-label="Columns">
         <button class="tab" id="tab-0" aria-controls="board" aria-selected="true">Cards</button>
         <button class="tab" id="tab-1" aria-controls="dock" aria-selected="false">Code &amp; notes</button>
@@ -49,18 +57,51 @@
           <span id="guess-status" class="guess-status"></span>
           <span class="guess-go" aria-hidden="true">Code ›</span>
         </button>
-        <section id="cards" class="cards" aria-label="Rule cards"></section>
-        <section class="log-wrap" aria-label="Check history">
-          <table id="log" class="log"></table>
+        <section class="area" aria-labelledby="cards-head">
+          <header class="area-head">
+            <h2 id="cards-head">Rule cards</h2>
+            <p class="tip">
+              Each card secretly checks one of its answers. Check codes against cards to find out which, and tap
+              answers you've ruled out to cross them off.
+            </p>
+          </header>
+          <div id="cards" class="cards"></div>
+        </section>
+        <section id="log-section" class="area" aria-labelledby="log-head" hidden>
+          <header class="area-head">
+            <h2 id="log-head">Your checks</h2>
+            <p class="tip">Every code you've tested, and whether it passed (✓) or failed (✗) each card.</p>
+          </header>
+          <div class="log-wrap"><table id="log" class="log"></table></div>
         </section>
       </div>
 
       <aside id="dock" class="dock pane" aria-label="Code entry and notes">
-        <div id="positions" class="columns positions" aria-hidden="true"></div>
-        <div id="slots" class="columns slots" aria-live="polite"></div>
-        <div id="notes" class="columns notes" aria-label="Digit notes: tap to cross out or mark"></div>
+        <section class="area" aria-labelledby="keypad-head">
+          <header class="area-head">
+            <h2 id="keypad-head">Pick digits</h2>
+            <p class="tip">Tap a digit to type it, or drag it onto a slot below.</p>
+          </header>
+          <div id="keypad" class="keypad"></div>
+        </section>
+        <section class="area" aria-labelledby="code-head">
+          <header class="area-head">
+            <h2 id="code-head">Your code</h2>
+            <p class="tip">Tap a slot to choose where the next digit goes, then check the code against up to 3 cards.</p>
+          </header>
+          <div id="positions" class="columns positions" aria-hidden="true"></div>
+          <div id="slots" class="columns slots" aria-live="polite"></div>
+        </section>
+        <section id="notes-section" class="area" aria-labelledby="notes-head">
+          <header class="area-head">
+            <h2 id="notes-head">Notes</h2>
+            <p class="tip">
+              Cross out digits you've ruled out for each position. When one is left in a column, it lights up in that position's color.
+            </p>
+          </header>
+          <div id="notes" class="columns notes"></div>
+        </section>
         <p id="status" class="status" role="status"></p>
-        <div id="keypad" class="keypad" aria-label="Keypad"></div>
         <div id="actions" class="actions"></div>
       </aside>
     </main>

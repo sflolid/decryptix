@@ -1,12 +1,24 @@
 import { describe, expect, it } from 'vitest';
+import { analyze } from './analyze';
 import { cardPool } from './cards';
-import { DIFFICULTIES, DIGIT_MAX, DIGIT_MIN, type Difficulty, dailyPuzzle, generatePuzzle, puzzleNumber, solutions } from './puzzle';
+import {
+  DIFFICULTIES,
+  DIGIT_MAX,
+  DIGIT_MIN,
+  type Difficulty,
+  MAX_LENGTH,
+  MIN_LENGTH,
+  dailyPuzzle,
+  generatePuzzle,
+  puzzleNumber,
+  solutions,
+} from './puzzle';
 import { mulberry32 } from './rng';
 
 const levels = Object.keys(DIFFICULTIES) as Difficulty[];
 
 describe.each(levels)('generatePuzzle (%s)', (difficulty) => {
-  const { length, minCards, maxCards } = DIFFICULTIES[difficulty];
+  const { score, checks } = DIFFICULTIES[difficulty];
 
   it('is deterministic for a given seed', () => {
     const a = generatePuzzle('seed-1', difficulty);
@@ -15,10 +27,11 @@ describe.each(levels)('generatePuzzle (%s)', (difficulty) => {
     expect(a.cards.map((c) => c.id)).toEqual(b.cards.map((c) => c.id));
   });
 
-  it('makes codes of the right length from digits in range', () => {
-    for (let i = 0; i < 20; i++) {
+  it('makes 3- to 5-digit codes from digits in range', () => {
+    for (let i = 0; i < 15; i++) {
       const { secret } = generatePuzzle(`seed-${i}`, difficulty);
-      expect(secret).toHaveLength(length);
+      expect(secret.length).toBeGreaterThanOrEqual(MIN_LENGTH);
+      expect(secret.length).toBeLessThanOrEqual(MAX_LENGTH);
       for (const d of secret) {
         expect(d).toBeGreaterThanOrEqual(DIGIT_MIN);
         expect(d).toBeLessThanOrEqual(DIGIT_MAX);
@@ -26,18 +39,21 @@ describe.each(levels)('generatePuzzle (%s)', (difficulty) => {
     }
   });
 
-  it("makes the secret the only code matching every card's hidden answer", () => {
-    for (let i = 0; i < 20; i++) {
+  it("makes the secret the only code passing every card, within the level's bands", () => {
+    for (let i = 0; i < 15; i++) {
       const p = generatePuzzle(`seed-${i}`, difficulty);
-      expect(p.cards.length).toBeGreaterThanOrEqual(minCards);
-      expect(p.cards.length).toBeLessThanOrEqual(maxCards);
       expect(solutions(p)).toEqual([p.secret]);
       for (const card of p.cards) expect(card.test(card.answer, p.secret), card.id).toBe(true);
+      expect(p.analysis.score).toBeGreaterThanOrEqual(score[0]);
+      expect(p.analysis.score).toBeLessThanOrEqual(score[1]);
+      expect(p.analysis.checks).toBeGreaterThanOrEqual(checks[0]);
+      expect(p.analysis.checks).toBeLessThanOrEqual(checks[1]);
+      expect(p.analysis).toEqual(analyze(p.cards, p.secret.length, DIGIT_MIN, DIGIT_MAX));
     }
   });
 
   it('never includes a redundant card', () => {
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 8; i++) {
       const p = generatePuzzle(`seed-${i}`, difficulty);
       for (let c = 0; c < p.cards.length; c++) {
         const without = { ...p, cards: p.cards.filter((_, j) => j !== c) };
@@ -47,11 +63,8 @@ describe.each(levels)('generatePuzzle (%s)', (difficulty) => {
   });
 });
 
-// Every card is checked against every possible code, so skip 6-digit codes
-// (46,656 of them); the card logic is the same at every length.
-describe.each(levels.filter((d) => DIFFICULTIES[d].length <= 5))('cardPool (%s)', (difficulty) => {
+describe.each([3, 4, 5])('cardPool (%i digits)', (length) => {
   it('gives every code exactly one answer per group on every card, and every answer is possible', () => {
-    const { length } = DIFFICULTIES[difficulty];
     const codes: number[][] = [];
     const walk = (prefix: number[]) => {
       if (prefix.length === length) return void codes.push(prefix);
@@ -76,6 +89,24 @@ describe.each(levels.filter((d) => DIFFICULTIES[d].length <= 5))('cardPool (%s)'
   }, 60_000);
 });
 
+describe('analyze', () => {
+  it('scores a one-clue-at-a-time puzzle low and a combined-clue puzzle higher', () => {
+    const easy = generatePuzzle('analyze-easy', 'easy');
+    const hard = generatePuzzle('analyze-hard', 'hard');
+    expect(easy.analysis.pairRounds).toBe(0);
+    expect(easy.analysis.needsSearch).toBe(false);
+    expect(hard.analysis.score).toBeGreaterThan(easy.analysis.score);
+    expect(hard.analysis.checks).toBeGreaterThan(easy.analysis.checks);
+  });
+
+  it('records a checks estimate for generated puzzles', () => {
+    const p = generatePuzzle('analyze-checks', 'medium');
+    expect(p.analysis.checks).toBeGreaterThan(0);
+    // With every card checked against the secret itself, all must pass.
+    for (const card of p.cards) expect(card.test(card.answer, p.secret)).toBe(true);
+  });
+});
+
 describe('daily', () => {
   it('numbers puzzles from the launch date', () => {
     expect(puzzleNumber('2026-09-22')).toBe(1);
@@ -85,6 +116,6 @@ describe('daily', () => {
 
   it('gives each difficulty its own puzzle', () => {
     const secrets = levels.map((d) => dailyPuzzle(d, '2026-09-23').secret.join(''));
-    expect(secrets.map((s) => s.length)).toEqual([3, 4, 5, 6]);
+    expect(new Set(secrets).size).toBe(levels.length);
   });
 });

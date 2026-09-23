@@ -1,19 +1,44 @@
+import { type Analysis, estimateChecks, reason } from './analyze';
 import { type Card, type Digits, cardPool } from './cards';
 import { type Rng, hashString, mulberry32, shuffle } from './rng';
 
-export const DIFFICULTIES = {
-  easy: { label: 'Easy', length: 3, minCards: 4, maxCards: 5, trickyChance: 0.25 },
-  medium: { label: 'Medium', length: 4, minCards: 1, maxCards: 5, trickyChance: 0.4 },
-  hard: { label: 'Hard', length: 5, minCards: 1, maxCards: 6, trickyChance: 0.55 },
-  veryhard: { label: 'Very hard', length: 6, minCards: 1, maxCards: 7, trickyChance: 0.65 },
-} as const;
-export type Difficulty = keyof typeof DIFFICULTIES;
+/**
+ * How the generator picks each card from its sample: the one that narrows
+ * things down most, a random useful one, or the least useful one. Weaker
+ * cards have to be combined with others, which makes deduction harder.
+ */
+export type Pick = 'strongest' | 'random' | 'weakest';
+
+/**
+ * Difficulty is how much work the code takes, not how long it is: every level
+ * uses 3- to 5-digit codes. A puzzle must land in both of its level's bands:
+ * the reasoning score once all answers are known, and the checks a sensible
+ * player needs to get there (see analyze.ts). `pick` nudges the generator.
+ */
+export const DIFFICULTIES: Record<
+  Difficulty,
+  { label: string; score: [number, number]; checks: [number, number]; pick: Pick }
+> = {
+  easy: { label: 'Easy', score: [1, 2], checks: [2, 4], pick: 'strongest' },
+  medium: { label: 'Medium', score: [3, 5], checks: [5, 7], pick: 'random' },
+  hard: { label: 'Hard', score: [6, 12], checks: [8, 14], pick: 'weakest' },
+};
+export type Difficulty = 'easy' | 'medium' | 'hard';
+
+export const MIN_LENGTH = 3;
+export const MAX_LENGTH = 5;
+const MIN_CARDS = 3;
+/** Longer codes need more cards to pin down, especially from weak cards. */
+const maxCardsFor = (length: number) => length + 2;
+/** Chance a puzzle starts from a tricky card (see buildCards). */
+const TRICKY_CHANCE = 0.4;
 
 export interface Puzzle {
   number: number;
   difficulty: Difficulty;
   secret: Digits;
   cards: Card[];
+  analysis: Analysis;
 }
 
 const SAMPLE_SIZE = 6;
@@ -89,21 +114,24 @@ function matching(sp: Space, cards: Card[], among?: number[]): number[] {
 const narrow = (sp: Space, card: Card, candidates: number[]) =>
   candidates.filter((n) => card.test(card.answer, sp.codes[n]));
 
+export interface BuildOptions {
+  maxCards: number;
+  minCards?: number;
+  trickyChance?: number;
+  pick?: Pick;
+  lo?: number;
+  hi?: number;
+}
+
 /**
- * Greedily pick cards (best of a small random sample each round, for variety)
- * until the secret is the only code passing every hidden rule, then drop any
- * card that turns out to be redundant. With probability `trickyChance` it
- * starts from a tricky card, so harder cards turn up often but not always.
+ * Pick cards one at a time (from a small random sample each round, chosen per
+ * `pick`) until the secret is the only code passing every hidden rule, then
+ * drop any card that turns out to be redundant. With probability
+ * `trickyChance` it starts from a tricky card, so harder cards turn up often
+ * but not always.
  */
-export function buildCards(
-  secret: Digits,
-  rng: Rng,
-  maxCards: number,
-  minCards = 1,
-  trickyChance = 0,
-  lo = DIGIT_MIN,
-  hi = DIGIT_MAX,
-): Card[] | null {
+export function buildCards(secret: Digits, rng: Rng, opts: BuildOptions): Card[] | null {
+  const { maxCards, minCards = 1, trickyChance = 0, pick: how = 'strongest', lo = DIGIT_MIN, hi = DIGIT_MAX } = opts;
   const sp = space(lo, hi, secret.length);
   const pool = shuffle(rng, cardPool(rng, lo, hi, secret.length));
   for (const card of pool) {
@@ -132,12 +160,15 @@ export function buildCards(
   }
 
   while (candidates.length > 1 && pool.length > 0) {
-    let best: { idx: number; left: number[] } | null = null;
+    const useful: { idx: number; left: number[] }[] = [];
     for (let t = 0; t < SAMPLE_SIZE && t < pool.length; t++) {
       const idx = Math.floor(rng() * pool.length);
       const left = narrow(sp, pool[idx], candidates);
-      if (left.length < candidates.length && (!best || left.length < best.left.length)) best = { idx, left };
+      if (left.length < candidates.length && !useful.some((u) => u.idx === idx)) useful.push({ idx, left });
     }
+    useful.sort((a, b) => a.left.length - b.left.length);
+    const best =
+      how === 'strongest' ? useful[0] : how === 'weakest' ? useful.at(-1) : useful[Math.floor(rng() * useful.length)];
     if (!best) {
       pool.splice(Math.floor(rng() * pool.length), 1);
       continue;
@@ -162,13 +193,30 @@ export function buildCards(
   return chosen.length >= minCards && chosen.length <= maxCards ? shuffle(rng, chosen) : null;
 }
 
+const within = (n: number, [min, max]: [number, number]) => n >= min && n <= max;
+
+/**
+ * Generate puzzles (random 3- to 5-digit codes) until one lands in the
+ * difficulty's reasoning and checks bands. Reasoning is checked first since
+ * it's far cheaper to measure.
+ */
 export function generatePuzzle(seed: string, difficulty: Difficulty = 'hard', number = 0): Puzzle {
-  const { length, minCards, maxCards, trickyChance } = DIFFICULTIES[difficulty];
+  const { score, checks, pick } = DIFFICULTIES[difficulty];
   const rng = mulberry32(hashString(seed));
   for (;;) {
+    const length = MIN_LENGTH + Math.floor(rng() * (MAX_LENGTH - MIN_LENGTH + 1));
     const secret = Array.from({ length }, () => DIGIT_MIN + Math.floor(rng() * (DIGIT_MAX - DIGIT_MIN + 1)));
-    const cards = buildCards(secret, rng, maxCards, minCards, trickyChance);
-    if (cards) return { number, difficulty, secret, cards };
+    const cards = buildCards(secret, rng, {
+      maxCards: maxCardsFor(length),
+      minCards: MIN_CARDS,
+      trickyChance: TRICKY_CHANCE,
+      pick,
+    });
+    if (!cards) continue;
+    const reasoning = reason(cards, length, DIGIT_MIN, DIGIT_MAX);
+    if (!within(reasoning.score, score)) continue;
+    const analysis = { ...reasoning, checks: estimateChecks(cards, space(DIGIT_MIN, DIGIT_MAX, length).codes) };
+    if (within(analysis.checks, checks)) return { number, difficulty, secret, cards, analysis };
   }
 }
 

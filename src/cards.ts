@@ -39,22 +39,19 @@ interface Group {
 }
 
 /**
- * Ordinal name and marker shape for each digit position. The first five gain
- * an edge per position (0 = circle) so their order is easy to read at a
- * glance; the 6th is a five-point star, since a heptagon reads as a circle
- * at marker size.
+ * Ordinal name and marker shape for each digit position. Shapes gain an edge
+ * per position (0 = circle) so their order is easy to read at a glance.
  */
-export const POSITIONS: { name: string; sides: number; star?: boolean }[] = [
+export const POSITIONS = [
   { name: '1st', sides: 0 },
   { name: '2nd', sides: 3 },
   { name: '3rd', sides: 4 },
   { name: '4th', sides: 5 },
   { name: '5th', sides: 6 },
-  { name: '6th', sides: 5, star: true },
 ];
 
 /**
- * Card text refers to digit positions as `{0}`…`{5}` so the UI can render
+ * Card text refers to digit positions as `{0}`…`{4}` so the UI can render
  * each one with its position's symbol. Split text into literal strings and
  * position numbers.
  */
