@@ -5,6 +5,7 @@ export const DIFFICULTIES = {
   easy: { label: 'Easy', length: 3, minCards: 4, maxCards: 5, trickyChance: 0.25 },
   medium: { label: 'Medium', length: 4, minCards: 1, maxCards: 5, trickyChance: 0.4 },
   hard: { label: 'Hard', length: 5, minCards: 1, maxCards: 6, trickyChance: 0.55 },
+  veryhard: { label: 'Very hard', length: 6, minCards: 1, maxCards: 7, trickyChance: 0.65 },
 } as const;
 export type Difficulty = keyof typeof DIFFICULTIES;
 
@@ -16,6 +17,13 @@ export interface Puzzle {
 }
 
 const SAMPLE_SIZE = 6;
+/**
+ * An "=" answer pins a digit or total outright, so those cards are far
+ * stronger than their "<" / ">" siblings and greedy picking would favor them.
+ * Keep only this share of them, so comparisons usually need combining with
+ * other clues to pin anything down.
+ */
+const EXACT_KEEP = 0.2;
 /**
  * Some card kinds narrow things down far faster than others, so an unchecked
  * greedy pick would make every puzzle out of them. Cap how many of each kind
@@ -75,6 +83,13 @@ function matching(sp: Space, cards: Card[], among?: number[]): number[] {
 }
 
 /**
+ * Candidates that pass one card's hidden rule. Tests only the given codes
+ * rather than caching the whole space, since most sampled cards are never used.
+ */
+const narrow = (sp: Space, card: Card, candidates: number[]) =>
+  candidates.filter((n) => card.test(card.answer, sp.codes[n]));
+
+/**
  * Greedily pick cards (best of a small random sample each round, for variety)
  * until the secret is the only code passing every hidden rule, then drop any
  * card that turns out to be redundant. With probability `trickyChance` it
@@ -96,6 +111,9 @@ export function buildCards(
     const passing = card.options.map((_, j) => j).filter((j) => card.test(j, secret));
     card.answer = passing[Math.floor(rng() * passing.length)];
   }
+  for (let i = pool.length - 1; i >= 0; i--) {
+    if (pool[i].exact[pool[i].answer] && rng() >= EXACT_KEEP) pool.splice(i, 1);
+  }
   let candidates = Array.from({ length: sp.codes.length }, (_, n) => n);
   const chosen: Card[] = [];
 
@@ -103,11 +121,11 @@ export function buildCards(
   // in nearly every puzzle; instead a puzzle gets them only `trickyChance` of
   // the time, starting from one.
   if (rng() < trickyChance) {
-    const idx = pool.findIndex((c) => c.tricky && matching(sp, [c], candidates).length < candidates.length);
+    const idx = pool.findIndex((c) => c.tricky && narrow(sp, c, candidates).length < candidates.length);
     if (idx >= 0) {
       const [first] = pool.splice(idx, 1);
       chosen.push(first);
-      candidates = matching(sp, [first], candidates);
+      candidates = narrow(sp, first, candidates);
     }
   } else {
     for (let i = pool.length - 1; i >= 0; i--) if (pool[i].tricky) pool.splice(i, 1);
@@ -117,7 +135,7 @@ export function buildCards(
     let best: { idx: number; left: number[] } | null = null;
     for (let t = 0; t < SAMPLE_SIZE && t < pool.length; t++) {
       const idx = Math.floor(rng() * pool.length);
-      const left = matching(sp, [pool[idx]], candidates);
+      const left = narrow(sp, pool[idx], candidates);
       if (left.length < candidates.length && (!best || left.length < best.left.length)) best = { idx, left };
     }
     if (!best) {

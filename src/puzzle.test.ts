@@ -47,7 +47,9 @@ describe.each(levels)('generatePuzzle (%s)', (difficulty) => {
   });
 });
 
-describe.each(levels)('cardPool (%s)', (difficulty) => {
+// Every card is checked against every possible code, so skip 6-digit codes
+// (46,656 of them); the card logic is the same at every length.
+describe.each(levels.filter((d) => DIFFICULTIES[d].length <= 5))('cardPool (%s)', (difficulty) => {
   it('gives every code exactly one answer per group on every card, and every answer is possible', () => {
     const { length } = DIFFICULTIES[difficulty];
     const codes: number[][] = [];
@@ -83,6 +85,6 @@ describe('daily', () => {
 
   it('gives each difficulty its own puzzle', () => {
     const secrets = levels.map((d) => dailyPuzzle(d, '2026-09-23').secret.join(''));
-    expect(secrets.map((s) => s.length)).toEqual([3, 4, 5]);
+    expect(secrets.map((s) => s.length)).toEqual([3, 4, 5, 6]);
   });
 });

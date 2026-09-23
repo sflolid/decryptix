@@ -26,6 +26,8 @@ export interface Card {
   tricky: boolean;
   /** Short explanation shown on tricky cards; may contain `{n}` positions. */
   hint?: string;
+  /** Answers that pin a value exactly ("= 3", "= ▲ 2nd"); the generator uses them sparingly. */
+  exact: boolean[];
   /** Index of the answer being checked; set by the puzzle generator. */
   answer: number;
 }
@@ -37,19 +39,22 @@ interface Group {
 }
 
 /**
- * Ordinal name and marker shape for each digit position. Shapes gain an edge
- * per position (0 = circle) so their order is easy to read at a glance.
+ * Ordinal name and marker shape for each digit position. The first five gain
+ * an edge per position (0 = circle) so their order is easy to read at a
+ * glance; the 6th is a five-point star, since a heptagon reads as a circle
+ * at marker size.
  */
-export const POSITIONS = [
+export const POSITIONS: { name: string; sides: number; star?: boolean }[] = [
   { name: '1st', sides: 0 },
   { name: '2nd', sides: 3 },
   { name: '3rd', sides: 4 },
   { name: '4th', sides: 5 },
   { name: '5th', sides: 6 },
+  { name: '6th', sides: 5, star: true },
 ];
 
 /**
- * Card text refers to digit positions as `{0}`…`{4}` so the UI can render
+ * Card text refers to digit positions as `{0}`…`{5}` so the UI can render
  * each one with its position's symbol. Split text into literal strings and
  * position numbers.
  */
@@ -57,7 +62,7 @@ export function textParts(text: string): (string | number)[] {
   return text.split(/\{(\d)\}/).map((part, i) => (i % 2 ? Number(part) : part));
 }
 
-const POS = [0, 1, 2, 3, 4].map((i) => `{${i}}`);
+const POS = POSITIONS.map((_, i) => `{${i}}`);
 const sum = (d: Digits) => d.reduce((a, b) => a + b, 0);
 const cmp = (a: number, b: number) => (a < b ? 0 : a === b ? 1 : 2);
 
@@ -80,6 +85,8 @@ export function cardPool(rng: Rng, lo = 0, hi = 9, length = 5): Card[] {
       title,
       options: groups.flatMap((g) => g.options),
       groupSize,
+      // compared() writes its equality answer as "= x".
+      exact: groups.flatMap((g) => g.options.map((o) => o.startsWith('= '))),
       test: (j, d) => groups[Math.floor(j / groupSize)].classify(d) === j % groupSize,
       tricky: false,
       answer: -1,

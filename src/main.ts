@@ -3,7 +3,7 @@ import { DIFFICULTIES, DIGIT_MAX, DIGIT_MIN, type Difficulty, type Puzzle, daily
 
 const CHECKS_PER_ROUND = 3;
 /** Saved progress is kept per difficulty: `${STORAGE_PREFIX}easy` etc. */
-const STORAGE_PREFIX = 'decrypt:v9:';
+const STORAGE_PREFIX = 'decrypt:v10:';
 const DIFFICULTY_KEY = 'decrypt:difficulty';
 const NOTES_HIDDEN_KEY = 'decrypt:notesHidden';
 const NOTES_LOCKED_KEY = 'decrypt:notesLocked';
@@ -160,8 +160,11 @@ function submitFinal() {
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/** A regular polygon with `sides` edges (0 draws a circle), flat-bottomed where possible. */
-function shape(sides: number): SVGSVGElement {
+/**
+ * A regular polygon with `sides` edges (0 draws a circle), flat-bottomed where
+ * possible, or a star with `sides` points.
+ */
+function shape(sides: number, star = false): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', '-1 -1 2 2');
   svg.setAttribute('class', 'sym');
@@ -171,10 +174,13 @@ function shape(sides: number): SVGSVGElement {
     c.setAttribute('r', '0.85');
     svg.append(c);
   } else {
-    const start = -Math.PI / 2 + (sides % 2 === 0 ? Math.PI / sides : 0);
-    const pts = Array.from({ length: sides }, (_, k) => {
-      const a = start + (2 * Math.PI * k) / sides;
-      return `${Math.cos(a).toFixed(3)},${Math.sin(a).toFixed(3)}`;
+    // A star alternates outer points with inner corners at 45% radius.
+    const corners = star ? sides * 2 : sides;
+    const start = -Math.PI / 2 + (!star && sides % 2 === 0 ? Math.PI / sides : 0);
+    const pts = Array.from({ length: corners }, (_, k) => {
+      const a = start + (2 * Math.PI * k) / corners;
+      const r = star && k % 2 ? 0.45 : 1;
+      return `${(r * Math.cos(a)).toFixed(3)},${(r * Math.sin(a)).toFixed(3)}`;
     });
     const p = document.createElementNS(SVG_NS, 'polygon');
     p.setAttribute('points', pts.join(' '));
@@ -187,7 +193,7 @@ function shape(sides: number): SVGSVGElement {
 function posChip(i: number): HTMLElement {
   const chip = document.createElement('span');
   chip.className = `pos p${i}`;
-  chip.append(shape(POSITIONS[i].sides));
+  chip.append(shape(POSITIONS[i].sides, POSITIONS[i].star));
   chip.append(POSITIONS[i].name);
   return chip;
 }
