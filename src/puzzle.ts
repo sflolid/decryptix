@@ -64,6 +64,12 @@ const KIND_LIMITS: Record<string, number> = {
 };
 /** Day #1 of the daily puzzle. */
 const EPOCH = Date.UTC(2026, 8, 22);
+/**
+ * Mixed into every daily seed. Changing it gives every day (today included)
+ * a fresh set of puzzles; bump STORAGE_PREFIX in main.ts alongside it so
+ * saved progress from the old puzzles is dropped.
+ */
+const SEED_VERSION = 2;
 export const DIGIT_MIN = 1;
 export const DIGIT_MAX = 6;
 
@@ -233,7 +239,7 @@ export function puzzleNumber(key: string): number {
 }
 
 export function dailyPuzzle(difficulty: Difficulty, key = todayKey()): Puzzle {
-  return generatePuzzle(`decrypt:${key}:${difficulty}`, difficulty, puzzleNumber(key));
+  return generatePuzzle(`decrypt:v${SEED_VERSION}:${key}:${difficulty}`, difficulty, puzzleNumber(key));
 }
 
 /** Every code consistent with the puzzle's hidden answers (tests check it's just the secret). */

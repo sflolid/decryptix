@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=VT323&display=swap"
     />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -27,8 +27,8 @@
             <li>The secret is a 3- to 5-digit code using digits <strong id="digit-range"></strong>.</li>
             <li>Each <strong>rule card</strong> lists every possible answer to a question, and secretly checks the one the secret gets.</li>
             <li>
-              Enter a code and check it against up to <strong>3 cards</strong> per round. <span class="ok">✓</span> means
-              your code gets the same answer as the secret; <span class="no">✗</span> means it doesn't.
+              Enter a code and check it against up to <strong>3 cards</strong> per round. <span class="ok" data-icon="ok">✓</span> means
+              your code gets the same answer as the secret; <span class="no" data-icon="no">✗</span> means it doesn't.
             </li>
             <li>Use the results to cross off card answers and digits you've ruled out, until only one code fits.</li>
             <li>Submit your final answer when you're sure. You only get one, and fewer checks is better.</li>
@@ -54,7 +54,6 @@
       <div id="board" class="board pane">
         <button id="guessbar" class="guessbar" aria-label="Current code: go to code and notes">
           <span id="guess-slots" class="mini-slots"></span>
-          <span id="guess-status" class="guess-status"></span>
           <span class="guess-go" aria-hidden="true">Code ›</span>
         </button>
         <section class="area" aria-labelledby="cards-head">
@@ -70,7 +69,8 @@
         <section id="log-section" class="area" aria-labelledby="log-head" hidden>
           <header class="area-head">
             <h2 id="log-head">Your checks</h2>
-            <p class="tip">Every code you've tested, and whether it passed (✓) or failed (✗) each card.</p>
+            <p class="tip">Every code you've tested, and whether it passed (<span class="ok" data-icon="ok">✓</span>) or failed
+              (<span class="no" data-icon="no">✗</span>) each card.</p>
           </header>
           <div class="log-wrap"><table id="log" class="log"></table></div>
         </section>
@@ -103,6 +103,7 @@
         </section>
         <p id="status" class="status" role="status"></p>
         <div id="actions" class="actions"></div>
+        <textarea id="results-text" class="results-text" readonly hidden aria-label="Your results"></textarea>
       </aside>
     </main>
 

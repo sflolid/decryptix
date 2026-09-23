@@ -14,11 +14,16 @@
   --p2: #c79be0;
   --p3: #f29cc2;
   --p4: #a9d0e2;
-  --font-ui: 'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  /* VT323, a thin pixel terminal face, for everything. It draws small for its size, so the base
+     size is 21px; --font-mono marks digit-heavy elements in case they ever need their own face. */
+  --font-ui: 'VT323', ui-monospace, Menlo, Consolas, monospace;
+  --font-mono: 'VT323', ui-monospace, Menlo, Consolas, monospace;
+  /* VT323 has no real bold, and a synthetic one blurs the pixels into blobs,
+     so emphasis comes from color and size instead. */
+  --bold: 400;
   color-scheme: dark;
   font-family: var(--font-ui);
-  font-size: 17px;
+  font-size: 21px;
   color: var(--text);
   background: var(--bg);
 }
@@ -66,6 +71,8 @@
 
 * { box-sizing: border-box; }
 
+strong, b { font-weight: var(--bold); }
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -79,7 +86,10 @@ body {
 
 header { width: 100%; max-width: 1100px; text-align: center; }
 .title-row { position: relative; }
-h1 { margin: 4px 0 10px; font-family: var(--font-mono); letter-spacing: 0.2em; font-size: 1.8rem; }
+h1 { margin: 4px 0 10px; font-family: var(--font-mono); font-weight: 400; letter-spacing: 0.15em; font-size: 2.2rem; line-height: 1; }
+
+/* Pixel-art ✓ / ✗ icons (see pixelIcon in main.ts). */
+.pix { width: 1em; height: 1em; vertical-align: -0.12em; fill: currentColor; shape-rendering: crispEdges; }
 h1 span { color: var(--accent); }
 .icon-btn {
   position: absolute;
@@ -105,7 +115,7 @@ h1 span { color: var(--accent); }
   border-radius: 10px;
 }
 .howto { padding: 10px 14px; font-size: 0.95rem; line-height: 1.55; }
-.howto summary { cursor: pointer; color: var(--muted); font-weight: bold; padding-right: 140px; }
+.howto summary { cursor: pointer; color: var(--muted); font-weight: var(--bold); padding-right: 140px; }
 .switch {
   position: absolute;
   top: 7px;
@@ -115,7 +125,7 @@ h1 span { color: var(--accent); }
   gap: 8px;
   color: var(--muted);
   font-size: 0.85rem;
-  font-weight: bold;
+  font-weight: var(--bold);
   cursor: pointer;
 }
 .switch input {
@@ -145,8 +155,8 @@ h1 span { color: var(--accent); }
 .switch input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .howto p { margin: 10px 0; }
 .howto ol { margin: 10px 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 6px; }
-.ok { color: var(--pass); font-weight: bold; }
-.no { color: var(--fail); font-weight: bold; }
+.ok { color: var(--pass); font-weight: var(--bold); }
+.no { color: var(--fail); font-weight: var(--bold); }
 
 main { width: 100%; max-width: 1100px; }
 
@@ -158,7 +168,7 @@ main { width: 100%; max-width: 1100px; }
   margin: 0;
   color: var(--muted);
   font-size: 0.78rem;
-  font-weight: bold;
+  font-weight: var(--bold);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -178,7 +188,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .p2 { --pc: var(--p2); }
 .p3 { --pc: var(--p3); }
 .p4 { --pc: var(--p4); }
-.pos { display: inline-flex; align-items: center; gap: 4px; color: var(--pc); font-weight: bold; white-space: nowrap; }
+.pos { display: inline-flex; align-items: center; gap: 4px; color: var(--pc); font-weight: var(--bold); white-space: nowrap; }
 .pos .sym { width: 0.85em; height: 0.85em; flex: none; fill: currentColor; }
 
 /* Rule cards */
@@ -209,7 +219,8 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   background: var(--accent);
   color: var(--on-accent);
   font-family: var(--font-mono);
-  font-weight: bold;
+  font-size: 1.15rem;
+  font-weight: var(--bold);
 }
 .card-title { flex: 1; margin: 0; font-size: 1.05rem; font-weight: normal; line-height: 1.35; text-wrap: balance; }
 .check {
@@ -220,7 +231,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   border: none;
   border-radius: 8px;
   color: var(--on-accent);
-  font-weight: bold;
+  font-weight: var(--bold);
 }
 .check:disabled { background: var(--raised); color: var(--muted); }
 .badge {
@@ -232,7 +243,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   border-radius: 8px;
   color: #fff;
   font-size: 1.3rem;
-  font-weight: bold;
+  font-weight: var(--bold);
 }
 .badge.ok { background: var(--pass); }
 .badge.no { background: var(--fail); }
@@ -249,14 +260,14 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   font-size: 0.95rem;
 }
 .option.crossed { color: var(--muted); text-decoration: line-through; opacity: 0.45; }
-.option.answer { border: 2px solid var(--pass); color: var(--pass); opacity: 1; text-decoration: none; font-weight: bold; }
+.option.answer { border: 2px solid var(--pass); color: var(--pass); opacity: 1; text-decoration: none; font-weight: var(--bold); }
 .option:disabled { cursor: default; }
 /* The last answer left after crossing out the rest. */
 .option.deduced {
   border: 2px solid var(--pass);
   background: color-mix(in srgb, var(--pass) 22%, var(--raised));
   color: var(--text);
-  font-weight: bold;
+  font-weight: var(--bold);
 }
 
 /* Difficulty switcher */
@@ -278,7 +289,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   border-radius: 10px;
 }
 .level[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
-.level-name { font-weight: bold; }
+.level-name { font-weight: var(--bold); }
 .level-len { color: var(--muted); font-size: 0.78rem; }
 
 /* Check history */
@@ -288,7 +299,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .log thead th { color: var(--muted); font-weight: normal; font-size: 0.9rem; }
 .log tbody th { color: var(--muted); font-weight: normal; }
 .log td.ok, .log td.no { font-size: 1.1rem; }
-.log .code { font-family: var(--font-mono); letter-spacing: 0.2em; font-size: 1.15rem; font-weight: bold; }
+.log .code { font-family: var(--font-mono); letter-spacing: 0.15em; font-size: 1.3rem; font-weight: var(--bold); }
 .log .code span { color: var(--pc); }
 
 /* Dock: code entry, digit notes and keypad. The right-hand pane on narrow
@@ -318,7 +329,7 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   border: none;
   border-radius: 7px;
   color: var(--muted);
-  font-weight: bold;
+  font-weight: var(--bold);
 }
 .tab[aria-selected='true'] { background: var(--accent); color: var(--on-accent); }
 
@@ -337,10 +348,10 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   box-shadow: 0 6px 16px rgb(0 0 0 / 0.2);
   text-align: left;
 }
-.mini-slots { display: flex; gap: 4px; }
-.mini-slots .slot { width: 30px; height: 38px; font-size: 1.15rem; border-width: 1px; border-bottom-width: 4px; }
-.guess-status { flex: 1; color: var(--muted); font-size: 0.9rem; line-height: 1.2; }
-.guess-go { color: var(--accent); font-weight: bold; white-space: nowrap; }
+/* The code is the guess bar's main content: big slots that share the width with "Code ›". */
+.mini-slots { flex: 1; display: grid; grid-template-columns: repeat(var(--cols, 5), minmax(0, 52px)); gap: 6px; }
+.mini-slots .slot { height: 54px; font-size: 2rem; border-width: 2px; border-bottom-width: 5px; }
+.guess-go { flex: none; color: var(--accent); font-size: 1.15rem; font-weight: var(--bold); white-space: nowrap; }
 
 .columns { display: grid; width: 100%; grid-template-columns: repeat(var(--cols, 5), minmax(0, 56px)); gap: 8px; justify-content: center; }
 .positions .pos { justify-content: center; font-size: 0.85rem; }
@@ -350,8 +361,8 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
   display: grid;
   place-items: center;
   font-family: var(--font-mono);
-  font-size: 1.8rem;
-  font-weight: bold;
+  font-size: 2rem;
+  font-weight: var(--bold);
   background: var(--raised);
   border: 2px solid var(--border);
   border-bottom: 5px solid var(--pc);
@@ -375,16 +386,16 @@ button.slot:disabled { cursor: default; }
   border: 1px solid var(--border);
   border-radius: 6px;
   font-family: var(--font-mono);
-  font-size: 0.95rem;
-  font-weight: bold;
+  font-size: 1.1rem;
+  font-weight: var(--bold);
 }
 .note.crossed { color: var(--muted); opacity: 0.3; text-decoration: line-through; }
 /* The last digit left in a column after crossing out the rest, in that position's color. */
 .note.deduced { border: 2px solid var(--pc); background: color-mix(in srgb, var(--pc) 35%, var(--raised)); }
 
 .status { margin: 0; min-height: 1.4em; color: var(--muted); font-size: 0.95rem; text-align: center; }
-.status.win { color: var(--pass); font-weight: bold; }
-.status.lose { color: var(--fail); font-weight: bold; }
+.status.win { color: var(--pass); font-weight: var(--bold); }
+.status.lose { color: var(--fail); font-weight: var(--bold); }
 
 .keypad {
   display: grid;
@@ -396,8 +407,8 @@ button.slot:disabled { cursor: default; }
 .key {
   height: 46px;
   font-family: var(--font-mono);
-  font-size: 1.3rem;
-  font-weight: bold;
+  font-size: 1.45rem;
+  font-weight: var(--bold);
   background: var(--raised);
   border: 2px solid var(--border);
   border-radius: 8px;
@@ -417,8 +428,8 @@ button.slot:disabled { cursor: default; }
   color: var(--on-accent);
   border-radius: 8px;
   font-family: var(--font-mono);
-  font-size: 1.5rem;
-  font-weight: bold;
+  font-size: 1.6rem;
+  font-weight: var(--bold);
   pointer-events: none;
   box-shadow: 0 8px 20px rgb(0 0 0 / 0.3);
 }
@@ -433,8 +444,22 @@ button.slot:disabled { cursor: default; }
   border-radius: 8px;
   font-size: 0.9rem;
 }
-.action.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: bold; }
+.action.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: var(--bold); }
 .action:disabled { opacity: 0.4; }
+/* Fallback when the clipboard is blocked: the results, selected for copying by hand. */
+.results-text {
+  width: 100%;
+  max-width: 360px;
+  padding: 8px 10px;
+  resize: none;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
 
 /* Narrow screens: header on top, then the two columns side by side filling
    the rest of the screen, swiped between with scroll snapping. */
@@ -468,7 +493,7 @@ button.slot:disabled { cursor: default; }
   }
   .board { gap: 14px; }
   /* Bigger tap targets for fingers. */
-  .note { height: 34px; font-size: 1rem; }
+  .note { height: 34px; font-size: 1.15rem; }
   .key { height: 50px; }
   .dock { gap: 16px; }
 }

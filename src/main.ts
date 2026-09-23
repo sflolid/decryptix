@@ -3,7 +3,7 @@ import { DIFFICULTIES, DIGIT_MAX, DIGIT_MIN, type Difficulty, type Puzzle, daily
 
 const CHECKS_PER_ROUND = 3;
 /** Saved progress is kept per difficulty: `${STORAGE_PREFIX}easy` etc. */
-const STORAGE_PREFIX = 'decrypt:v12:';
+const STORAGE_PREFIX = 'decrypt:v13:';
 const DIFFICULTY_KEY = 'decrypt:difficulty';
 const NOTES_HIDDEN_KEY = 'decrypt:notesHidden';
 const NOTES_LOCKED_KEY = 'decrypt:notesLocked';
@@ -63,7 +63,6 @@ const keypadEl = $('keypad');
 const logEl = $('log');
 const panesEl = $('panes');
 const guessSlotsEl = $('guess-slots');
-const guessStatusEl = $('guess-status');
 const levelsEl = $('levels');
 
 const toDigits = (s: string): Digits => s.split('').map(Number);
@@ -228,6 +227,21 @@ function submitFinal() {
   render();
 }
 
+/** Pixel-art ✓ and ✗ on an 8×8 grid, to match the pixel fonts. */
+const PIXEL_ICONS = {
+  ok: ['........', '.......#', '......##', '#....##.', '##..##..', '.####...', '..##....', '........'],
+  no: ['##....##', '###..###', '.######.', '..####..', '..####..', '.######.', '###..###', '##....##'],
+};
+
+/** SVG markup for a pixel icon: one rect per horizontal run of pixels. */
+function pixelIcon(kind: keyof typeof PIXEL_ICONS, label?: string): string {
+  const rects = PIXEL_ICONS[kind]
+    .flatMap((row, y) => [...row.matchAll(/#+/g)].map((m) => `<rect x="${m.index}" y="${y}" width="${m[0].length}" height="1"/>`))
+    .join('');
+  const a11y = label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"';
+  return `<svg class="pix" viewBox="0 0 8 8" ${a11y}>${rects}</svg>`;
+}
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** A regular polygon with `sides` edges (0 draws a circle), flat-bottomed where possible. */
@@ -317,7 +331,7 @@ function renderCards() {
     if (result != null) {
       const badge = document.createElement('span');
       badge.className = `badge ${result ? 'ok' : 'no'}`;
-      badge.textContent = result ? '✓' : '✗';
+      badge.innerHTML = pixelIcon(result ? 'ok' : 'no');
       badge.setAttribute('aria-label', result ? 'Pass' : 'Fail');
       head.append(badge);
     } else if (!done()) {
@@ -390,19 +404,8 @@ function renderSlots() {
       }),
     );
   }
-  guessStatusEl.textContent = shortStatus();
 }
 
-/** A few words for the guess bar on the cards column. */
-function shortStatus(): string {
-  if (done()) return solved() ? 'Decrypted!' : 'Game over';
-  const r = currentRound();
-  if (r) {
-    const left = CHECKS_PER_ROUND - checksIn(r);
-    return left ? `${left} check${left === 1 ? '' : 's'} left` : 'Round done: new code';
-  }
-  return entryComplete() ? 'Pick cards to check' : 'Type a code';
-}
 
 function renderStatus() {
   const checks = totalChecks();
@@ -435,12 +438,12 @@ function renderStatus() {
 
 function renderActions() {
   actionsEl.innerHTML = '';
-  const button = (label: string, cls: string, onClick: () => void, disabled = false) => {
+  const button = (label: string, cls: string, onClick: (b: HTMLButtonElement) => void, disabled = false) => {
     const b = document.createElement('button');
     b.textContent = label;
     b.className = cls;
     b.disabled = disabled;
-    b.addEventListener('click', onClick);
+    b.addEventListener('click', () => onClick(b));
     actionsEl.append(b);
   };
 
@@ -454,7 +457,7 @@ function renderActions() {
     button('Cancel', 'action', ask(null));
     return;
   }
-  if (done()) button('Share result', 'action primary', share);
+  if (done()) button('Copy results', 'action primary', copyResults);
   else button('Submit final answer…', 'action primary', ask('final'), shownCode() === '');
   if (!notesHidden) button(notesLocked ? '🔒 Unlock notes' : '🔓 Lock notes', 'action', toggleNotesLock);
   button(notesHidden ? 'Show notes' : 'Hide notes', 'action', toggleNotesPanel);
@@ -464,6 +467,7 @@ function renderActions() {
 function restart() {
   Object.assign(state, fresh());
   clearEntry();
+  resultsBox.hidden = true;
   confirming = null;
   save();
   render();
@@ -553,7 +557,7 @@ function renderLog() {
   const rows = state.rounds
     .map((r, n) => {
       const cells = r.results
-        .map((x) => (x === null ? '<td></td>' : `<td class="${x ? 'ok' : 'no'}">${x ? '✓' : '✗'}</td>`))
+        .map((x) => (x === null ? '<td></td>' : `<td class="${x ? 'ok' : 'no'}">${pixelIcon(x ? 'ok' : 'no', x ? 'Pass' : 'Fail')}</td>`))
         .join('');
       const digits = [...r.code].map((d, i) => `<span class="p${i}">${d}</span>`).join('');
       return `<tr><th scope="row">${n + 1}</th><td class="code">${digits}</td>${cells}</tr>`;
@@ -576,16 +580,36 @@ function render() {
   renderLevels();
 }
 
-async function share() {
+/**
+ * A spoiler-free summary of the game: one line per round with a block per
+ * card (🟩 passed, 🟥 failed, ⬛ not checked that round), then the outcome.
+ */
+function resultsText(): string {
   const checks = totalChecks();
-  const outcome = solved() ? `🔓 ${checks} checks · ${state.rounds.length} rounds` : `🔒 failed after ${checks} checks`;
-  const grid = state.rounds.map((r) => r.results.map((x) => (x === null ? '⬛' : x ? '🟩' : '🟥')).join('')).join('\n');
-  const text = `DECRYPT #${puzzle.number} ${DIFFICULTIES[difficulty].label} (${length} digits) ${outcome}\n${grid}`;
+  const rounds = state.rounds.length;
+  const tally = `${checks} check${checks === 1 ? '' : 's'} in ${rounds} round${rounds === 1 ? '' : 's'}`;
+  const grid = state.rounds.map((r) => r.results.map((x) => (x === null ? '⬛' : x ? '🟩' : '🟥')).join(''));
+  const outcome = solved() ? `🔓 Decryption completed! ${tally}` : `🔒 Decryption failed. ${tally}`;
+  return [`DECRYPT #${puzzle.number} · ${DIFFICULTIES[difficulty].label} · ${length} digits`, ...grid, outcome].join('\n');
+}
+
+const resultsBox = $<HTMLTextAreaElement>('results-text');
+
+/** Copy the results; if the clipboard is blocked, show them selected for copying by hand. */
+async function copyResults(button: HTMLButtonElement) {
+  const text = resultsText();
   try {
     await navigator.clipboard.writeText(text);
-    statusEl.textContent = 'Result copied to clipboard';
+    resultsBox.hidden = true;
+    button.textContent = 'Copied!';
+    statusEl.textContent = "Results copied. Paste them anywhere; they don't give away the code.";
+    setTimeout(() => (button.textContent = 'Copy results'), 2000);
   } catch {
-    statusEl.textContent = text;
+    resultsBox.value = text;
+    resultsBox.rows = text.split('\n').length;
+    resultsBox.hidden = false;
+    resultsBox.select();
+    statusEl.textContent = "Couldn't reach the clipboard. Your results are selected below: copy them from there.";
   }
 }
 
@@ -688,6 +712,7 @@ function selectDifficulty(d: Difficulty) {
   state = load();
   clearEntry();
   confirming = null;
+  resultsBox.hidden = true;
   document.documentElement.style.setProperty('--cols', String(length));
   $('puzzle-no').textContent = `#${puzzle.number}`;
   renderPositions();
@@ -701,7 +726,10 @@ function renderLevels() {
       const { label } = DIFFICULTIES[d];
       const p = puzzles.get(d);
       const saved = d === difficulty ? state : savedState(d);
-      const result = !p || saved?.final == null ? '' : saved.final === p.secret.join('') ? ' ✓' : ' ✗';
+      const result =
+        !p || saved?.final == null
+          ? ''
+          : ` ${saved.final === p.secret.join('') ? pixelIcon('ok', 'solved') : pixelIcon('no', 'missed')}`;
       const btn = document.createElement('button');
       btn.className = 'level';
       btn.setAttribute('aria-pressed', String(d === difficulty));
@@ -755,6 +783,12 @@ panesEl.addEventListener(
 );
 
 buildKeypad();
+// Swap the text ✓ / ✗ in the page's help copy for the pixel icons.
+for (const el of document.querySelectorAll<HTMLElement>('[data-icon]')) {
+  const kind = el.dataset.icon === 'ok' ? 'ok' : 'no';
+  el.innerHTML = pixelIcon(kind, kind === 'ok' ? 'pass' : 'fail');
+}
+
 // Open "How to play" for first-time visitors.
 if (!readFlag(SEEN_HELP_KEY)) {
   document.querySelector<HTMLDetailsElement>('.howto')!.open = true;
