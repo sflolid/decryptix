@@ -3,7 +3,7 @@
 A daily code-breaking puzzle, in the spirit of Wordle and Turing Machine.
 
 Each day there are three puzzles, **Easy**, **Medium** and **Hard**, each a 3- to 5-digit code using
-digits 1–6. Each puzzle has a set of **rule cards**. A card asks a question ("The ▲ 2nd digit
+digits 1–6. Each puzzle has a set of **rule cards**. A card asks a question ("The ♦ 2nd digit
 is… < 3 / = 3 / > 3") and lists every possible answer; the answers never overlap, so every code gets
 exactly one. Each card secretly checks the secret's answer.
 
@@ -35,7 +35,7 @@ npm run build:artifact  # also bundle a single self-contained dist/artifact.html
 
 ## Layout
 
-- `src/cards.ts` – rule card types and the position markers (● ▲ ■ ⬟ ⬢)
+- `src/cards.ts` – rule card types and the position markers (♥ ♦ ♣ ♠ ★, colored red to blue)
 - `src/puzzle.ts` – difficulties, daily seeding, and the generator that picks a minimal set of cards
   leaving exactly one possible code
 - `src/analyze.ts` – rates a puzzle's reasoning difficulty and estimates the checks needed

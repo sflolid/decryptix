@@ -16,46 +16,31 @@
   <body>
     <header>
       <div class="title-row">
+        <button id="help-btn" class="icon-btn help-btn" type="button" aria-label="How to play" title="How to play">?</button>
         <h1>DECRYPT <span id="puzzle-no"></span></h1>
         <button id="theme-toggle" class="icon-btn" type="button"></button>
       </div>
       <nav id="levels" class="levels" aria-label="Difficulty"></nav>
-      <div class="howto-box">
-        <details class="howto">
-          <summary>How to play</summary>
-          <ol>
-            <li>The secret is a 3- to 5-digit code using digits <strong id="digit-range"></strong>.</li>
-            <li>Each <strong>rule card</strong> lists every possible answer to a question, and secretly checks the one the secret gets.</li>
-            <li>
-              Enter a code and check it against up to <strong>3 cards</strong> per round. <span class="ok" data-icon="ok">✓</span> means
-              your code gets the same answer as the secret; <span class="no" data-icon="no">✗</span> means it doesn't.
-            </li>
-            <li>Use the results to cross off card answers and digits you've ruled out, until only one code fits.</li>
-            <li>Submit your final answer when you're sure. You only get one, and fewer checks is better.</li>
-          </ol>
-          <p>
-            <strong>Tricky</strong> cards are harder: they say how far apart two digits are without
-            saying which is bigger, or compare a digit with one of two others but only check one. Harder levels need
-            more checks and more reasoning, not longer codes.
-          </p>
-        </details>
-        <label class="switch">
-          <input type="checkbox" id="tips-toggle" checked />
-          <span>Area tips</span>
-        </label>
-      </div>
       <nav class="tabs" aria-label="Columns">
         <button class="tab" id="tab-0" aria-controls="board" aria-selected="true">Cards</button>
         <button class="tab" id="tab-1" aria-controls="dock" aria-selected="false">Code &amp; notes</button>
       </nav>
+      <p id="swipe-hint" class="swipe-hint" hidden>‹ Swipe left or right to switch screens ›</p>
     </header>
 
     <main id="panes">
       <div id="board" class="board pane">
         <button id="guessbar" class="guessbar" aria-label="Current code: go to code and notes">
           <span id="guess-slots" class="mini-slots"></span>
-          <span class="guess-go" aria-hidden="true">Code ›</span>
+          <span id="guess-go" class="guess-go" aria-hidden="true">Code ›</span>
         </button>
+        <div id="round-banner" class="round-banner" role="status" hidden>
+          <div class="round-banner-text">
+            <strong id="round-banner-title"></strong>
+            <span id="round-banner-results" class="round-banner-results"></span>
+          </div>
+          <button id="new-code" class="action primary" type="button">New code ›</button>
+        </div>
         <section class="area" aria-labelledby="cards-head">
           <header class="area-head">
             <h2 id="cards-head">Rule cards</h2>
@@ -91,6 +76,8 @@
           </header>
           <div id="positions" class="columns positions" aria-hidden="true"></div>
           <div id="slots" class="columns slots" aria-live="polite"></div>
+          <button id="to-cards" class="action primary to-cards" type="button" hidden>‹ Check it on the cards</button>
+          <button id="new-code-dock" class="action primary new-code-dock" type="button" hidden>Start a new code</button>
         </section>
         <section id="notes-section" class="area" aria-labelledby="notes-head">
           <header class="area-head">
@@ -106,6 +93,106 @@
         <textarea id="results-text" class="results-text" readonly hidden aria-label="Your results"></textarea>
       </aside>
     </main>
+
+    <dialog id="help" class="help" aria-labelledby="help-title">
+      <div class="help-top">
+        <h2 id="help-title">How to play</h2>
+        <button id="help-skip" class="help-skip" type="button">Skip</button>
+      </div>
+      <div id="help-steps" class="help-steps">
+        <section class="step" aria-label="Step: the secret code">
+          <h3>Crack the secret code</h3>
+          <div class="demo" aria-hidden="true">
+            <div class="columns demo-code" style="--cols: 3">
+              <span class="slot p0">?</span><span class="slot p1">?</span><span class="slot p2">?</span>
+            </div>
+          </div>
+          <p>The secret is a 3- to 5-digit code using digits <strong id="digit-range"></strong>. A new one every day, on three levels.</p>
+          <p>Each position has its own color and symbol:</p>
+          <p class="demo-chips" data-text="{0} {1} {2} {3} {4}"></p>
+        </section>
+
+        <section class="step" aria-label="Step: rule cards">
+          <h3>Read the rule cards</h3>
+          <div class="demo" aria-hidden="true">
+            <div class="card">
+              <div class="card-head"><span class="card-letter">A</span><span class="card-title" data-text="The {1} digit is…"></span></div>
+              <div class="options"><span class="option">even</span><span class="option">odd</span></div>
+            </div>
+          </div>
+          <p>Each card asks a question about the code and lists every possible answer.</p>
+          <p>The secret gets exactly one answer, and the card secretly knows which.</p>
+        </section>
+
+        <section class="step" aria-label="Step: test a code">
+          <h3>Test a code</h3>
+          <div class="demo" aria-hidden="true">
+            <div class="columns demo-code locked" style="--cols: 3">
+              <span class="slot p0">2</span><span class="slot p1">4</span><span class="slot p2">1</span>
+            </div>
+            <div class="card">
+              <div class="card-head">
+                <span class="card-letter">A</span><span class="card-title" data-text="The {1} digit is…"></span>
+                <span class="badge ok" data-icon="ok"></span>
+              </div>
+              <div class="options"><span class="option">even</span><span class="option">odd</span></div>
+            </div>
+          </div>
+          <p>Type any code, then tap <strong>Check</strong> on up to 3 cards. <span class="ok" data-icon="ok">✓</span> means the secret gets the same answer as your code; <span class="no" data-icon="no">✗</span> means it doesn't.</p>
+          <p class="muted" data-text="Here 241 passed, so the secret's {1} digit is even too."></p>
+        </section>
+
+        <section class="step" aria-label="Step: rule things out">
+          <h3>Rule things out</h3>
+          <div class="demo" aria-hidden="true">
+            <div class="card">
+              <div class="card-head"><span class="card-letter">A</span><span class="card-title" data-text="The {1} digit is…"></span></div>
+              <div class="options"><span class="option deduced">even</span><span class="option crossed">odd</span></div>
+            </div>
+            <div class="demo-notes p1">
+              <span class="note crossed">1</span><span class="note crossed">2</span><span class="note crossed">3</span><span class="note deduced">4</span><span class="note crossed">5</span><span class="note crossed">6</span>
+            </div>
+          </div>
+          <p>Tap card answers and note digits to cross them off. When only one is left, it lights up.</p>
+        </section>
+
+        <section class="step mobile-only" aria-label="Step: two screens">
+          <h3>Swipe between two screens</h3>
+          <div class="demo" aria-hidden="true">
+            <div class="demo-phone">
+              <div class="demo-track">
+                <div class="demo-pane"><strong>Cards</strong><span class="demo-bar"></span><span class="demo-bar"></span><span class="demo-bar"></span></div>
+                <div class="demo-pane"><strong>Code &amp; notes</strong><span class="demo-keys"></span><span class="demo-bar short"></span><span class="demo-bar"></span></div>
+              </div>
+            </div>
+            <span class="demo-swipe">‹ swipe ›</span>
+          </div>
+          <p>The cards are on one screen. Your code, keypad and notes are on the other.</p>
+          <p><strong>Swipe left or right</strong>, or tap the tabs at the top, to switch.</p>
+        </section>
+
+        <section class="step" aria-label="Step: final answer">
+          <h3>Submit one final answer</h3>
+          <div class="demo" aria-hidden="true">
+            <span class="action primary demo-submit">Submit final answer…</span>
+            <span class="demo-result">🟩🟥⬛<br />🟩🟩🟩<br />🔓 5 checks in 2 rounds</span>
+          </div>
+          <p>When only one code fits, submit it. You get <strong>one try</strong>, and fewer checks is a better score.</p>
+          <p class="muted">Watch for <strong>tricky</strong> cards: they say how far apart two digits are without saying which is bigger, or check against one of two digits.</p>
+        </section>
+      </div>
+      <div class="help-nav">
+        <button id="help-back" class="action" type="button">‹ Back</button>
+        <div id="help-dots" class="dots"></div>
+        <button id="help-next" class="action primary" type="button">Next ›</button>
+      </div>
+      <div class="help-foot">
+        <label class="switch">
+          <input type="checkbox" id="tips-toggle" checked />
+          <span>Show tips in each area</span>
+        </label>
+      </div>
+    </dialog>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

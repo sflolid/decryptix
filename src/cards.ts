@@ -26,7 +26,7 @@ export interface Card {
   tricky: boolean;
   /** Short explanation shown on tricky cards; may contain `{n}` positions. */
   hint?: string;
-  /** Answers that pin a value exactly ("= 3", "= ▲ 2nd"); the generator uses them sparingly. */
+  /** Answers that pin a value exactly ("= 3", "= ♦ 2nd"); the generator uses them sparingly. */
   exact: boolean[];
   /** Index of the answer being checked; set by the puzzle generator. */
   answer: number;
@@ -38,16 +38,16 @@ interface Group {
   classify: (d: Digits) => number;
 }
 
-/**
- * Ordinal name and marker shape for each digit position. Shapes gain an edge
- * per position (0 = circle) so their order is easy to read at a glance.
- */
-export const POSITIONS = [
-  { name: '1st', sides: 0 },
-  { name: '2nd', sides: 3 },
-  { name: '3rd', sides: 4 },
-  { name: '4th', sides: 5 },
-  { name: '5th', sides: 6 },
+/** Marker shapes for the digit positions: the four card suits, then a star. */
+export type Suit = 'heart' | 'diamond' | 'club' | 'spade' | 'star';
+
+/** Ordinal name and marker shape for each digit position. */
+export const POSITIONS: { name: string; suit: Suit }[] = [
+  { name: '1st', suit: 'heart' },
+  { name: '2nd', suit: 'diamond' },
+  { name: '3rd', suit: 'club' },
+  { name: '4th', suit: 'spade' },
+  { name: '5th', suit: 'star' },
 ];
 
 /**

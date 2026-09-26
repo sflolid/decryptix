@@ -1,4 +1,4 @@
-import { type Digits, POSITIONS, textParts } from './cards';
+import { type Digits, POSITIONS, type Suit, textParts } from './cards';
 import { DIFFICULTIES, DIGIT_MAX, DIGIT_MIN, type Difficulty, type Puzzle, dailyPuzzle, todayKey } from './puzzle';
 
 const CHECKS_PER_ROUND = 3;
@@ -10,8 +10,10 @@ const NOTES_LOCKED_KEY = 'decrypt:notesLocked';
 const TIPS_HIDDEN_KEY = 'decrypt:tipsHidden';
 /** 'light' or 'dark' once the player picks one; otherwise the device setting applies. */
 const THEME_KEY = 'decrypt:theme';
-/** Set once "How to play" has been shown open on a first visit. */
+/** Set once the "How to play" walkthrough has been shown on a first visit. */
 const SEEN_HELP_KEY = 'decrypt:seenHelp';
+/** Set once the player has switched to the second screen on a phone, which retires the swipe hint. */
+const SWIPED_KEY = 'decrypt:swiped';
 const LETTERS = 'ABCDEFGHIJ';
 
 /** One code tested against some cards; results[i] is null if card i wasn't checked. */
@@ -73,6 +75,8 @@ const done = () => state.final !== null;
 const solved = () => state.final === secret;
 const currentRound = () => (state.open ? state.rounds.at(-1)! : null);
 const checksIn = (r: Round) => r.results.filter((x) => x !== null).length;
+/** Whether the current code has used all its checks, so the next step is a new code. */
+const roundFull = () => !!currentRound() && checksIn(currentRound()!) >= CHECKS_PER_ROUND && !state.final;
 const totalChecks = () => state.rounds.reduce((n, r) => n + checksIn(r), 0);
 const entryComplete = () => entry.length === length && entry.every((d) => d !== '');
 /** The complete code on show (the locked round's, or a fully typed entry), else ''. */
@@ -217,6 +221,15 @@ function dropDigit(i: number, digit: string) {
   render();
 }
 
+/** Clear the checked code so the player can type the next round's code. */
+function startNewCode() {
+  if (!roundFull()) return;
+  confirming = null;
+  unlockRound(true);
+  render();
+  showPane(1);
+}
+
 function submitFinal() {
   const answer = shownCode();
   if (answer.length !== length || done()) return;
@@ -244,34 +257,34 @@ function pixelIcon(kind: keyof typeof PIXEL_ICONS, label?: string): string {
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/** A regular polygon with `sides` edges (0 draws a circle), flat-bottomed where possible. */
-function shape(sides: number): SVGSVGElement {
+/** SVG markup for each position's marker, drawn in a -1..1 box. */
+const SUIT_SVG: Record<Suit, string> = {
+  heart:
+    '<path d="M0,0.85C-0.3,0.6 -0.95,0.2 -0.95,-0.3C-0.95,-0.7 -0.6,-0.9 -0.35,-0.9C-0.15,-0.9 0,-0.75 0,-0.55C0,-0.75 0.15,-0.9 0.35,-0.9C0.6,-0.9 0.95,-0.7 0.95,-0.3C0.95,0.2 0.3,0.6 0,0.85Z"/>',
+  diamond: '<path d="M0,-0.95L0.7,0L0,0.95L-0.7,0Z"/>',
+  club:
+    '<circle cx="0" cy="-0.47" r="0.37"/><circle cx="-0.45" cy="0.13" r="0.37"/><circle cx="0.45" cy="0.13" r="0.37"/>' +
+    '<path d="M-0.08,0L0.08,0L0.3,0.95L-0.3,0.95Z"/>',
+  spade:
+    '<path d="M0,-0.95C-0.3,-0.65 -0.95,-0.3 -0.95,0.15C-0.95,0.5 -0.65,0.65 -0.4,0.65C-0.2,0.65 -0.05,0.55 0,0.4C0.05,0.55 0.2,0.65 0.4,0.65C0.65,0.65 0.95,0.5 0.95,0.15C0.95,-0.3 0.3,-0.65 0,-0.95Z"/>' +
+    '<path d="M-0.08,0.3L0.08,0.3L0.3,0.95L-0.3,0.95Z"/>',
+  star: '<polygon points="0.000,-0.870 0.235,-0.244 0.904,-0.214 0.380,0.204 0.558,0.849 0.000,0.480 -0.558,0.849 -0.380,0.204 -0.904,-0.214 -0.235,-0.244"/>',
+};
+
+function shape(suit: Suit): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', '-1 -1 2 2');
   svg.setAttribute('class', 'sym');
   svg.setAttribute('aria-hidden', 'true');
-  if (sides === 0) {
-    const c = document.createElementNS(SVG_NS, 'circle');
-    c.setAttribute('r', '0.85');
-    svg.append(c);
-  } else {
-    const start = -Math.PI / 2 + (sides % 2 === 0 ? Math.PI / sides : 0);
-    const pts = Array.from({ length: sides }, (_, k) => {
-      const a = start + (2 * Math.PI * k) / sides;
-      return `${Math.cos(a).toFixed(3)},${Math.sin(a).toFixed(3)}`;
-    });
-    const p = document.createElementNS(SVG_NS, 'polygon');
-    p.setAttribute('points', pts.join(' '));
-    svg.append(p);
-  }
+  svg.innerHTML = SUIT_SVG[suit];
   return svg;
 }
 
-/** A position marker like "▲ 2nd", colored to match its column. */
+/** A position marker like "♦ 2nd", colored to match its column. */
 function posChip(i: number): HTMLElement {
   const chip = document.createElement('span');
   chip.className = `pos p${i}`;
-  chip.append(shape(POSITIONS[i].sides));
+  chip.append(shape(POSITIONS[i].suit));
   chip.append(POSITIONS[i].name);
   return chip;
 }
@@ -334,7 +347,8 @@ function renderCards() {
       badge.innerHTML = pixelIcon(result ? 'ok' : 'no');
       badge.setAttribute('aria-label', result ? 'Pass' : 'Fail');
       head.append(badge);
-    } else if (!done()) {
+    } else if (!done() && !roundFull()) {
+      // Once the round's checks are used up, unchecked cards just show no button.
       const btn = document.createElement('button');
       btn.className = 'check';
       btn.textContent = 'Check';
@@ -407,6 +421,20 @@ function renderSlots() {
 }
 
 
+/** A banner above the cards once a round's checks are used up: how it went, and a way on. */
+function renderRoundBanner() {
+  const banner = $('round-banner');
+  banner.hidden = !roundFull();
+  if (banner.hidden) return;
+  const r = currentRound()!;
+  $('round-banner-title').textContent = `Round ${state.rounds.length} done: all ${CHECKS_PER_ROUND} checks used`;
+  $('round-banner-results').innerHTML = r.results
+    .map((x, i) =>
+      x === null ? '' : `<span class="${x ? 'ok' : 'no'}">${LETTERS[i]} ${pixelIcon(x ? 'ok' : 'no', x ? 'pass' : 'fail')}</span>`,
+    )
+    .join('');
+}
+
 function renderStatus() {
   const checks = totalChecks();
   const rounds = state.rounds.length;
@@ -426,7 +454,7 @@ function renderStatus() {
     const left = CHECKS_PER_ROUND - checksIn(currentRound()!);
     statusEl.textContent = left
       ? `Round ${rounds}: ${left} check${left === 1 ? '' : 's'} left for this code. ${tally}`
-      : `Round ${rounds} done. Type a new code for the next round. ${tally}`;
+      : `Round ${rounds} done. Type a new code, or tap Start a new code. ${tally}`;
   } else if (!entryComplete()) {
     statusEl.textContent = rounds
       ? `Enter a new code. ${tally}`
@@ -576,6 +604,16 @@ function render() {
   document.body.classList.toggle('no-tips', tipsHidden);
   notesEl.classList.toggle('locked', notesLocked);
   keypadEl.classList.toggle('disabled', done());
+  // Phones only: once a code is ready to check, point back to the cards screen.
+  $('to-cards').hidden = !cards.some((_, i) => canCheck(i));
+  $('new-code-dock').hidden = !roundFull();
+  $('guess-go').textContent = roundFull()
+    ? 'New code ›'
+    : shownCode() || entry.some((d) => d !== '')
+      ? 'Code ›'
+      : 'Enter a code ›';
+  $('guessbar').classList.toggle('attention', roundFull());
+  renderRoundBanner();
   renderLog();
   renderLevels();
 }
@@ -679,7 +717,7 @@ function buildKeypad() {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || help.open) return;
   if (/^\d$/.test(e.key) || ['Backspace', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
     e.preventDefault();
     press(e.key);
@@ -773,27 +811,122 @@ function showPane(i: number) {
 
 tabs.forEach((tab, i) => tab.addEventListener('click', () => showPane(i)));
 $('guessbar').addEventListener('click', () => showPane(1));
+$('to-cards').addEventListener('click', () => showPane(0));
+$('new-code').addEventListener('click', startNewCode);
+$('new-code-dock').addEventListener('click', startNewCode);
+const swipeHint = $('swipe-hint');
+swipeHint.hidden = readFlag(SWIPED_KEY);
 panesEl.addEventListener(
   'scroll',
   () => {
     const current = Math.round(panesEl.scrollLeft / Math.max(1, panesEl.clientWidth));
     tabs.forEach((tab, i) => tab.setAttribute('aria-selected', String(i === current)));
+    if (current === 1 && !swipeHint.hidden) {
+      swipeHint.hidden = true;
+      writeFlag(SWIPED_KEY, true);
+    }
   },
   { passive: true },
 );
 
+/** Slide both panes over briefly so a new player sees there's a second screen. */
+function peekPanes() {
+  if (reducedMotion || panesEl.scrollWidth <= panesEl.clientWidth || readFlag(SWIPED_KEY)) return;
+  panesEl.classList.add('peek');
+  panesEl.addEventListener('animationend', () => panesEl.classList.remove('peek'), { once: true });
+}
+
+/**
+ * "How to play": a dialog of short steps that swipe sideways (scroll-snap),
+ * with dots and Back / Next. Steps marked mobile-only are hidden on wide screens.
+ */
+const help = $<HTMLDialogElement>('help');
+const helpSteps = $('help-steps');
+const helpBack = $('help-back');
+const helpNext = $('help-next');
+const helpDots = $('help-dots');
+let helpStep = 0;
+/** Whether closing the walkthrough should then show off the swipeable panes. */
+let peekAfterHelp = false;
+
+const visibleSteps = () => [...helpSteps.children].filter((el) => getComputedStyle(el).display !== 'none');
+
+function renderHelpNav() {
+  const count = visibleSteps().length;
+  helpBack.setAttribute('aria-hidden', String(helpStep === 0));
+  (helpBack as HTMLButtonElement).disabled = helpStep === 0;
+  helpNext.textContent = helpStep === count - 1 ? 'Play!' : 'Next ›';
+  helpDots.replaceChildren(
+    ...Array.from({ length: count }, (_, i) => {
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'dot';
+      dot.setAttribute('aria-label', `Step ${i + 1} of ${count}`);
+      if (i === helpStep) dot.setAttribute('aria-current', 'step');
+      dot.addEventListener('click', () => goToStep(i));
+      return dot;
+    }),
+  );
+}
+
+function goToStep(i: number) {
+  helpStep = Math.max(0, Math.min(visibleSteps().length - 1, i));
+  helpSteps.scrollTo({ left: helpStep * helpSteps.clientWidth, behavior: reducedMotion ? 'auto' : 'smooth' });
+  renderHelpNav();
+}
+
+function openHelp() {
+  help.showModal();
+  helpSteps.scrollLeft = 0;
+  helpStep = 0;
+  renderHelpNav();
+  helpNext.focus();
+}
+
+helpSteps.addEventListener(
+  'scroll',
+  () => {
+    const at = Math.round(helpSteps.scrollLeft / Math.max(1, helpSteps.clientWidth));
+    if (at !== helpStep) {
+      helpStep = at;
+      renderHelpNav();
+    }
+  },
+  { passive: true },
+);
+helpBack.addEventListener('click', () => goToStep(helpStep - 1));
+helpNext.addEventListener('click', () => (helpStep >= visibleSteps().length - 1 ? help.close() : goToStep(helpStep + 1)));
+$('help-skip').addEventListener('click', () => help.close());
+$('help-btn').addEventListener('click', openHelp);
+// A click on the dialog element itself is a click on the backdrop around it.
+help.addEventListener('click', (e) => e.target === help && help.close());
+help.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    e.preventDefault();
+    goToStep(helpStep + (e.key === 'ArrowLeft' ? -1 : 1));
+  }
+});
+help.addEventListener('close', () => {
+  if (!peekAfterHelp) return;
+  peekAfterHelp = false;
+  setTimeout(peekPanes, 300);
+});
+
 buildKeypad();
-// Swap the text ✓ / ✗ in the page's help copy for the pixel icons.
+// Swap the text ✓ / ✗ in the page's help copy for the pixel icons,
+// and render `{n}` in help text as position markers.
 for (const el of document.querySelectorAll<HTMLElement>('[data-icon]')) {
   const kind = el.dataset.icon === 'ok' ? 'ok' : 'no';
   el.innerHTML = pixelIcon(kind, kind === 'ok' ? 'pass' : 'fail');
 }
-
-// Open "How to play" for first-time visitors.
-if (!readFlag(SEEN_HELP_KEY)) {
-  document.querySelector<HTMLDetailsElement>('.howto')!.open = true;
-  writeFlag(SEEN_HELP_KEY, true);
-}
+for (const el of document.querySelectorAll<HTMLElement>('[data-text]')) fillText(el, el.dataset.text!);
 
 selectDifficulty(savedDifficulty());
 preloadOtherLevels();
+
+// Walk first-time visitors through how to play.
+if (!readFlag(SEEN_HELP_KEY)) {
+  writeFlag(SEEN_HELP_KEY, true);
+  peekAfterHelp = true;
+  openHelp();
+}
