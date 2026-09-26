@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="A daily code-breaking puzzle. Test codes against hidden rule cards and deduce the secret." />
-    <title>Decrypt</title>
+    <title>Decryptix</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -17,7 +17,7 @@
     <header>
       <div class="title-row">
         <button id="help-btn" class="icon-btn help-btn" type="button" aria-label="How to play" title="How to play">?</button>
-        <h1>DECRYPT <span id="puzzle-no"></span></h1>
+        <h1>DECRYPTIX <span id="puzzle-no"></span></h1>
         <button id="theme-toggle" class="icon-btn" type="button"></button>
       </div>
       <nav id="levels" class="levels" aria-label="Difficulty"></nav>
@@ -78,7 +78,9 @@
           <div id="slots" class="columns slots" aria-live="polite"></div>
           <button id="to-cards" class="action primary to-cards" type="button" hidden>‹ Check it on the cards</button>
           <button id="new-code-dock" class="action primary new-code-dock" type="button" hidden>Start a new code</button>
+          <ol id="used" class="used" aria-label="Used codes, newest first" hidden></ol>
         </section>
+
         <section id="notes-section" class="area" aria-labelledby="notes-head">
           <header class="area-head">
             <h2 id="notes-head">Notes</h2>

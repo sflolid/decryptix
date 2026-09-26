@@ -10,7 +10,7 @@ const asset = (href) => readFileSync(join(dist, href.replace(/^\.?\//, '')), 'ut
 const title = html.match(/<title>(.*?)<\/title>/s)[1];
 // Remote stylesheets (Google Fonts) stay as links; the viewer's CSP allows them.
 const fontLinks = [...html.matchAll(/<link[^>]+href="https:\/\/fonts\.googleapis\.com[^"]*"[^>]*>/gs)].map((m) => m[0]);
-const cssHref = html.match(/<link[^>]+rel="stylesheet"[^>]+href="(\/[^"]+)"/)[1];
+const cssHref = html.match(/<link[^>]+rel="stylesheet"[^>]+href="(\.?\/[^"]+)"/)[1];
 const jsSrc = html.match(/<script[^>]+src="([^"]+)"/)[1];
 const body = html
   .match(/<body>([\s\S]*)<\/body>/)[1]

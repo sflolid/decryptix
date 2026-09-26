@@ -435,6 +435,23 @@ function renderRoundBanner() {
     .join('');
 }
 
+/** The dock's list of checked codes under "Your code", most recent first. */
+function renderUsed() {
+  $('used').hidden = !state.rounds.length;
+  $('used').innerHTML = state.rounds
+    .map((r, n) => {
+      const digits = [...r.code].map((d, i) => `<span class="p${i}">${d}</span>`).join('');
+      const results = r.results
+        .map((x, i) =>
+          x === null ? '' : `<span class="${x ? 'ok' : 'no'}">${LETTERS[i]}${pixelIcon(x ? 'ok' : 'no', x ? 'pass' : 'fail')}</span>`,
+        )
+        .join('');
+      return `<li><span class="used-round">${n + 1}</span><span class="used-code">${digits}</span><span class="used-results">${results}</span></li>`;
+    })
+    .reverse()
+    .join('');
+}
+
 function renderStatus() {
   const checks = totalChecks();
   const rounds = state.rounds.length;
@@ -614,6 +631,7 @@ function render() {
       : 'Enter a code ›';
   $('guessbar').classList.toggle('attention', roundFull());
   renderRoundBanner();
+  renderUsed();
   renderLog();
   renderLevels();
 }
@@ -628,7 +646,7 @@ function resultsText(): string {
   const tally = `${checks} check${checks === 1 ? '' : 's'} in ${rounds} round${rounds === 1 ? '' : 's'}`;
   const grid = state.rounds.map((r) => r.results.map((x) => (x === null ? '⬛' : x ? '🟩' : '🟥')).join(''));
   const outcome = solved() ? `🔓 Decryption completed! ${tally}` : `🔒 Decryption failed. ${tally}`;
-  return [`DECRYPT #${puzzle.number} · ${DIFFICULTIES[difficulty].label} · ${length} digits`, ...grid, outcome].join('\n');
+  return [`DECRYPTIX #${puzzle.number} · ${DIFFICULTIES[difficulty].label} · ${length} digits`, ...grid, outcome].join('\n');
 }
 
 const resultsBox = $<HTMLTextAreaElement>('results-text');

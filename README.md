@@ -1,4 +1,6 @@
-# Decrypt
+# Decryptix
+
+**Play it:** https://sflolid.github.io/decryptix/
 
 A daily code-breaking puzzle, in the spirit of Wordle and Turing Machine.
 
