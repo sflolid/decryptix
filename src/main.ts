@@ -33,6 +33,10 @@ interface State {
   notes: number[][];
   /** Digit notes per position, indexed by digit value: 1 crossed out, 0 not. */
   grid: number[][];
+  /** Time spent on the puzzle so far (ms), counted only while the page is visible. */
+  elapsed?: number;
+  /** Whether the player has started (the timer starts on their first move, not on page load). */
+  started?: boolean;
 }
 
 const DIGITS = Array.from({ length: DIGIT_MAX - DIGIT_MIN + 1 }, (_, i) => DIGIT_MIN + i);
@@ -90,7 +94,44 @@ function canCheck(i: number): boolean {
 }
 
 function fresh(): State {
-  return { day, rounds: [], open: false, final: null, notes: cards.map(() => []), grid: emptyGrid() };
+  return { day, rounds: [], open: false, final: null, notes: cards.map(() => []), grid: emptyGrid(), elapsed: 0, started: false };
+}
+
+/**
+ * The play timer. `state.elapsed` holds the banked time; while the timer runs,
+ * `runningSince` marks when the current stretch began. It pauses while the
+ * page is hidden and stops for good on the final answer.
+ */
+let runningSince: number | null = null;
+const elapsedMs = () => (state.elapsed ?? 0) + (runningSince === null ? 0 : Date.now() - runningSince);
+
+function formatTime(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
+
+/** Start (or resume) the timer; called on the player's moves. */
+function startTimer() {
+  if (done()) return;
+  state.started = true;
+  if (runningSince === null && document.visibilityState === 'visible') runningSince = Date.now();
+}
+
+/** Bank the running stretch into the saved state and stop counting. */
+function pauseTimer() {
+  if (runningSince === null) return;
+  state.elapsed = elapsedMs();
+  runningSince = null;
+  save();
+}
+
+function renderTimer() {
+  const el = $('timer');
+  el.textContent = `⏱ ${formatTime(elapsedMs())}`;
+  el.classList.toggle('running', runningSince !== null);
 }
 
 function emptyGrid(): number[][] {
@@ -130,6 +171,7 @@ function check(i: number) {
     state.open = true;
     clearEntry();
   }
+  startTimer();
   const r = currentRound()!;
   r.results[i] = passes(i, toDigits(r.code));
   save();
@@ -137,6 +179,7 @@ function check(i: number) {
 }
 
 function toggleNote(card: number, option: number) {
+  startTimer();
   const n = state.notes[card];
   const at = n.indexOf(option);
   if (at >= 0) n.splice(at, 1);
@@ -177,6 +220,7 @@ function unlockRound(fresh: boolean) {
 
 function press(key: string) {
   if (done()) return;
+  startTimer();
   confirming = null;
   const n = Number(key);
   if (/^\d$/.test(key) && n >= DIGIT_MIN && n <= DIGIT_MAX) {
@@ -205,6 +249,7 @@ function press(key: string) {
 /** Pick which slot the keypad fills next. */
 function selectSlot(i: number) {
   if (done()) return;
+  startTimer();
   confirming = null;
   unlockRound(false);
   cursor = i;
@@ -214,6 +259,7 @@ function selectSlot(i: number) {
 /** Put a digit straight into a slot (drag and drop from the keypad). */
 function dropDigit(i: number, digit: string) {
   if (done()) return;
+  startTimer();
   confirming = null;
   unlockRound(false);
   entry[i] = digit;
@@ -233,11 +279,13 @@ function startNewCode() {
 function submitFinal() {
   const answer = shownCode();
   if (answer.length !== length || done()) return;
+  pauseTimer();
   state.final = answer;
   state.open = false;
   confirming = null;
   save();
   render();
+  showResult();
 }
 
 /** Pixel-art ✓ and ✗ on an 8×8 grid, to match the pixel fonts. */
@@ -295,6 +343,7 @@ function fillText(el: HTMLElement, text: string) {
 }
 
 function toggleGrid(pos: number, digit: number) {
+  startTimer();
   const row = state.grid[pos];
   row[digit] = row[digit] === 1 ? 0 : 1;
   save();
@@ -369,6 +418,8 @@ function renderCards() {
     // Once every answer but one is crossed out, the one left is the deduction.
     const crossed = state.notes[i];
     const deduced = crossed.length === card.options.length - 1;
+    // Easy only: mark the answer(s) this round's code got on a checked card, with its ✓ or ✗.
+    const hintCode = DIFFICULTIES[difficulty].optionHints && r && result != null ? toDigits(r.code) : null;
     card.options.forEach((text, j) => {
       if (j > 0 && j % card.groupSize === 0) {
         const or = document.createElement('span');
@@ -382,6 +433,14 @@ function renderCards() {
       if (crossed.includes(j)) opt.classList.add('crossed');
       else if (deduced) opt.classList.add('deduced');
       if (done() && j === card.answer) opt.classList.add('answer');
+      if (hintCode && card.test(j, hintCode)) {
+        const mark = document.createElement('span');
+        mark.className = `mark ${result ? 'ok' : 'no'}`;
+        mark.innerHTML = pixelIcon(result ? 'ok' : 'no');
+        opt.classList.add(result ? 'hit-ok' : 'hit-no');
+        opt.append(mark);
+        opt.setAttribute('aria-description', `Your code ${r!.code} gets this answer and ${result ? 'passed' : 'failed'}`);
+      }
       opt.setAttribute('aria-pressed', String(state.notes[i].includes(j)));
       opt.disabled = done();
       opt.addEventListener('click', () => toggleNote(i, j));
@@ -422,6 +481,86 @@ function renderSlots() {
 
 
 /** A banner above the cards once a round's checks are used up: how it went, and a way on. */
+/** Once the final answer is in: a banner above the cards with the outcome and a way back to the results. */
+function renderResultBanner() {
+  const banner = $('result-banner');
+  banner.hidden = !done();
+  if (banner.hidden) return;
+  banner.classList.toggle('lost', !solved());
+  const checks = totalChecks();
+  $('result-banner-title').textContent = solved() ? '🎉 You cracked it!' : '🔒 Not this time';
+  $('result-banner-sub').textContent = solved()
+    ? `${checks} check${checks === 1 ? '' : 's'} · ${state.rounds.length} round${state.rounds.length === 1 ? '' : 's'} · ⏱ ${formatTime(elapsedMs())}`
+    : `The code was ${secret} · ⏱ ${formatTime(elapsedMs())}`;
+}
+
+/** The next level (in order) that today's puzzle hasn't been finished on, if any. */
+function nextUnfinished(): Difficulty | null {
+  return (Object.keys(DIFFICULTIES) as Difficulty[]).find((d) => d !== difficulty && savedState(d)?.final == null) ?? null;
+}
+
+/** Colored code slots, for the results dialog. */
+function codeSlots(code: string): HTMLElement[] {
+  return [...code].map((d, i) => {
+    const slot = document.createElement('span');
+    slot.className = `slot p${i}`;
+    slot.textContent = d;
+    return slot;
+  });
+}
+
+const resultDialog = $<HTMLDialogElement>('result');
+
+/** The big win / loss screen: shown on submitting, and again from the banner. */
+function showResult(celebrate = true) {
+  const won = solved();
+  const checks = totalChecks();
+  resultDialog.classList.toggle('lost', !won);
+  $('result-emoji').textContent = won ? '🎉' : '🔒';
+  $('result-title').textContent = won ? 'Congrats! You cracked it!' : 'Not this time';
+  $('result-sub').textContent = `Decryptix #${puzzle.number} · ${DIFFICULTIES[difficulty].label}`;
+  $('result-code-label').textContent = won ? 'The secret code' : 'The code was';
+  const codeEl = $('result-code');
+  codeEl.style.setProperty('--cols', String(length));
+  codeEl.replaceChildren(...codeSlots(secret));
+  const answerEl = $('result-answer');
+  answerEl.hidden = won;
+  if (!won) {
+    answerEl.innerHTML = `You answered <span class="used-code">${[...state.final!].map((d, i) => `<span class="p${i}">${d}</span>`).join('')}</span>`;
+  }
+  $('result-checks').textContent = String(checks);
+  $('result-rounds').textContent = String(state.rounds.length);
+  $('result-time').textContent = formatTime(elapsedMs());
+  $('result-grid').textContent = state.rounds.map((r) => r.results.map((x) => (x === null ? '⬛' : x ? '🟩' : '🟥')).join('')).join('\n');
+  $('result-text').hidden = true;
+  const next = nextUnfinished();
+  const nextBtn = $('result-next');
+  nextBtn.hidden = !next;
+  if (next) nextBtn.textContent = `Try ${DIFFICULTIES[next].label} ›`;
+  if (!resultDialog.open) resultDialog.showModal();
+  $('result-copy').focus();
+  if (won && celebrate) confetti();
+}
+
+/** A burst of pixel confetti in the position colors. */
+function confetti() {
+  if (reducedMotion) return;
+  const layer = $('confetti');
+  layer.replaceChildren(
+    ...Array.from({ length: 70 }, () => {
+      const bit = document.createElement('span');
+      bit.className = `p${Math.floor(Math.random() * POSITIONS.length)}`;
+      bit.style.left = `${Math.random() * 100}%`;
+      bit.style.animationDelay = `${Math.random() * 0.8}s`;
+      bit.style.animationDuration = `${2.2 + Math.random() * 1.6}s`;
+      bit.style.setProperty('--drift', `${(Math.random() - 0.5) * 160}px`);
+      bit.style.setProperty('--spin', `${(Math.random() - 0.5) * 1440}deg`);
+      return bit;
+    }),
+  );
+  setTimeout(() => layer.replaceChildren(), 4600);
+}
+
 function renderRoundBanner() {
   const banner = $('round-banner');
   banner.hidden = !roundFull();
@@ -461,7 +600,7 @@ function renderStatus() {
   if (done()) {
     statusEl.classList.add(solved() ? 'win' : 'lose');
     statusEl.textContent = solved()
-      ? `Decrypted! ${tally}`
+      ? `🎉 You cracked it! ${tally}`
       : `Wrong code. The secret was ${secret}. ${tally}`;
   } else if (confirming === 'final') {
     statusEl.textContent = `Submit ${shownCode()} as your final answer? You only get one.`;
@@ -510,6 +649,7 @@ function renderActions() {
 }
 
 function restart() {
+  runningSince = null;
   Object.assign(state, fresh());
   clearEntry();
   resultsBox.hidden = true;
@@ -624,13 +764,17 @@ function render() {
   // Phones only: once a code is ready to check, point back to the cards screen.
   $('to-cards').hidden = !cards.some((_, i) => canCheck(i));
   $('new-code-dock').hidden = !roundFull();
-  $('guess-go').textContent = roundFull()
-    ? 'New code ›'
-    : shownCode() || entry.some((d) => d !== '')
-      ? 'Code ›'
-      : 'Enter a code ›';
+  $('guess-go').textContent = done()
+    ? 'Done'
+    : roundFull()
+      ? 'New code ›'
+      : shownCode() || entry.some((d) => d !== '')
+        ? 'Code ›'
+        : 'Enter a code ›';
   $('guessbar').classList.toggle('attention', roundFull());
   renderRoundBanner();
+  renderResultBanner();
+  renderTimer();
   renderUsed();
   renderLog();
   renderLevels();
@@ -646,25 +790,26 @@ function resultsText(): string {
   const tally = `${checks} check${checks === 1 ? '' : 's'} in ${rounds} round${rounds === 1 ? '' : 's'}`;
   const grid = state.rounds.map((r) => r.results.map((x) => (x === null ? '⬛' : x ? '🟩' : '🟥')).join(''));
   const outcome = solved() ? `🔓 Decryption completed! ${tally}` : `🔒 Decryption failed. ${tally}`;
-  return [`DECRYPTIX #${puzzle.number} · ${DIFFICULTIES[difficulty].label} · ${length} digits`, ...grid, outcome].join('\n');
+  const time = `⏱ ${formatTime(elapsedMs())}`;
+  return [`DECRYPTIX #${puzzle.number} · ${DIFFICULTIES[difficulty].label} · ${length} digits`, ...grid, outcome, time].join('\n');
 }
 
 const resultsBox = $<HTMLTextAreaElement>('results-text');
 
 /** Copy the results; if the clipboard is blocked, show them selected for copying by hand. */
-async function copyResults(button: HTMLButtonElement) {
+async function copyResults(button: HTMLButtonElement, box = resultsBox) {
   const text = resultsText();
   try {
     await navigator.clipboard.writeText(text);
-    resultsBox.hidden = true;
+    box.hidden = true;
     button.textContent = 'Copied!';
     statusEl.textContent = "Results copied. Paste them anywhere; they don't give away the code.";
     setTimeout(() => (button.textContent = 'Copy results'), 2000);
   } catch {
-    resultsBox.value = text;
-    resultsBox.rows = text.split('\n').length;
-    resultsBox.hidden = false;
-    resultsBox.select();
+    box.value = text;
+    box.rows = text.split('\n').length;
+    box.hidden = false;
+    box.select();
     statusEl.textContent = "Couldn't reach the clipboard. Your results are selected below: copy them from there.";
   }
 }
@@ -735,7 +880,7 @@ function buildKeypad() {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey || e.metaKey || e.altKey || help.open) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || help.open || resultDialog.open) return;
   if (/^\d$/.test(e.key) || ['Backspace', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
     e.preventDefault();
     press(e.key);
@@ -755,6 +900,8 @@ function savedDifficulty(): Difficulty {
 
 /** Switch to a difficulty's daily puzzle, restoring today's progress on it. */
 function selectDifficulty(d: Difficulty) {
+  // Bank the level being left; the new one resumes only if the player had started it.
+  if (state) pauseTimer();
   difficulty = d;
   try {
     localStorage.setItem(DIFFICULTY_KEY, d);
@@ -766,6 +913,7 @@ function selectDifficulty(d: Difficulty) {
   secret = puzzle.secret.join('');
   length = puzzle.secret.length;
   state = load();
+  if (state.started) startTimer();
   clearEntry();
   confirming = null;
   resultsBox.hidden = true;
@@ -831,6 +979,15 @@ tabs.forEach((tab, i) => tab.addEventListener('click', () => showPane(i)));
 $('guessbar').addEventListener('click', () => showPane(1));
 $('to-cards').addEventListener('click', () => showPane(0));
 $('new-code').addEventListener('click', startNewCode);
+$('result-banner-open').addEventListener('click', () => showResult(false));
+$('result-copy').addEventListener('click', (e) => copyResults(e.currentTarget as HTMLButtonElement, $<HTMLTextAreaElement>('result-text')));
+$('result-close').addEventListener('click', () => resultDialog.close());
+$('result-next').addEventListener('click', () => {
+  const next = nextUnfinished();
+  resultDialog.close();
+  if (next) selectDifficulty(next);
+});
+resultDialog.addEventListener('click', (e) => e.target === resultDialog && resultDialog.close());
 $('new-code-dock').addEventListener('click', startNewCode);
 const swipeHint = $('swipe-hint');
 swipeHint.hidden = readFlag(SWIPED_KEY);
@@ -941,6 +1098,22 @@ for (const el of document.querySelectorAll<HTMLElement>('[data-text]')) fillText
 
 selectDifficulty(savedDifficulty());
 preloadOtherLevels();
+
+// Tick the timer display, and bank the time every few seconds in case the page is closed abruptly.
+let ticks = 0;
+setInterval(() => {
+  renderTimer();
+  if (runningSince !== null && ++ticks % 5 === 0) {
+    pauseTimer();
+    startTimer();
+  }
+}, 1000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') pauseTimer();
+  else if (state.started) startTimer();
+  renderTimer();
+});
+window.addEventListener('pagehide', pauseTimer);
 
 // Walk first-time visitors through how to play.
 if (!readFlag(SEEN_HELP_KEY)) {

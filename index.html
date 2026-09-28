@@ -18,6 +18,7 @@
       <div class="title-row">
         <button id="help-btn" class="icon-btn help-btn" type="button" aria-label="How to play" title="How to play">?</button>
         <h1>DECRYPTIX <span id="puzzle-no"></span></h1>
+        <p id="timer" class="timer" role="timer" aria-label="Time spent on this puzzle"></p>
         <button id="theme-toggle" class="icon-btn" type="button"></button>
       </div>
       <nav id="levels" class="levels" aria-label="Difficulty"></nav>
@@ -34,6 +35,13 @@
           <span id="guess-slots" class="mini-slots"></span>
           <span id="guess-go" class="guess-go" aria-hidden="true">Code ›</span>
         </button>
+        <div id="result-banner" class="round-banner result-banner" hidden>
+          <div class="round-banner-text">
+            <strong id="result-banner-title"></strong>
+            <span id="result-banner-sub"></span>
+          </div>
+          <button id="result-banner-open" class="action primary" type="button">Results</button>
+        </div>
         <div id="round-banner" class="round-banner" role="status" hidden>
           <div class="round-banner-text">
             <strong id="round-banner-title"></strong>
@@ -193,6 +201,30 @@
           <input type="checkbox" id="tips-toggle" checked />
           <span>Show tips in each area</span>
         </label>
+      </div>
+    </dialog>
+
+    <dialog id="result" class="result" aria-labelledby="result-title">
+      <div id="confetti" class="confetti" aria-hidden="true"></div>
+      <div class="result-body">
+        <div id="result-emoji" class="result-emoji" aria-hidden="true"></div>
+        <h2 id="result-title" class="result-title"></h2>
+        <p id="result-sub" class="result-sub"></p>
+        <p id="result-code-label" class="result-label"></p>
+        <div id="result-code" class="columns result-code locked"></div>
+        <p id="result-answer" class="result-label"></p>
+        <div class="result-stats">
+          <div><strong id="result-checks"></strong><span>checks</span></div>
+          <div><strong id="result-rounds"></strong><span>rounds</span></div>
+          <div><strong id="result-time"></strong><span>time</span></div>
+        </div>
+        <pre id="result-grid" class="result-grid" aria-label="Your rounds"></pre>
+        <textarea id="result-text" class="results-text" readonly hidden aria-label="Your results"></textarea>
+        <div class="result-actions">
+          <button id="result-copy" class="action primary" type="button">Copy results</button>
+          <button id="result-next" class="action" type="button" hidden></button>
+          <button id="result-close" class="action" type="button">Close</button>
+        </div>
       </div>
     </dialog>
 

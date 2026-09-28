@@ -14,12 +14,13 @@ export type Pick = 'strongest' | 'random' | 'weakest';
  * uses 3- to 5-digit codes. A puzzle must land in both of its level's bands:
  * the reasoning score once all answers are known, and the checks a sensible
  * player needs to get there (see analyze.ts). `pick` nudges the generator.
+ * `optionHints` marks which answer the checked code got on each card.
  */
 export const DIFFICULTIES: Record<
   Difficulty,
-  { label: string; score: [number, number]; checks: [number, number]; pick: Pick }
+  { label: string; score: [number, number]; checks: [number, number]; pick: Pick; optionHints?: boolean }
 > = {
-  easy: { label: 'Easy', score: [1, 2], checks: [2, 4], pick: 'strongest' },
+  easy: { label: 'Easy', score: [1, 2], checks: [2, 4], pick: 'strongest', optionHints: true },
   medium: { label: 'Medium', score: [3, 5], checks: [5, 7], pick: 'random' },
   hard: { label: 'Hard', score: [6, 12], checks: [8, 14], pick: 'weakest' },
 };
